@@ -227,13 +227,9 @@ func (c *Client) receivePackets() {
 	// Create a reader
 	reader := bufio.NewReader(c.conn)
 
-	bk := false
 	serverInfoCount := 0
+root:
 	for {
-		if bk {
-			c.up = false
-			break
-		}
 		select {
 		case <-c.done:
 			return
@@ -242,9 +238,7 @@ func (c *Client) receivePackets() {
 			err := c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 			if err != nil {
 				c.logger.Error(nil, "Error setting read deadline (timeout) ", err)
-				bk = true
-				// Debounce
-				time.Sleep(1 * time.Second)
+				break root
 			}
 
 			// Read string from reader
@@ -257,14 +251,10 @@ func (c *Client) receivePackets() {
 				}
 				if err.Error() == "EOF" {
 					c.logger.Warn(nil, "Server closed the connection")
-					bk = true
-					// Debounce
-					time.Sleep(1 * time.Second)
+					break root
 				}
 				c.logger.Error(nil, "Error reading from server ", err)
-				bk = true
-				// Debounce
-				time.Sleep(1 * time.Second)
+				break root
 			}
 
 			// Trim space
@@ -287,6 +277,11 @@ func (c *Client) receivePackets() {
 			c.handler(line)
 		}
 	}
+
+	// Update status
+	c.up = false
+	// Debounce
+	time.Sleep(1 * time.Second)
 
 	// Reconnect
 	for i := 0; i < c.retryTimes; i++ {
