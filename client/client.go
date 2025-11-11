@@ -293,9 +293,11 @@ func (c *Client) receivePackets() {
 		err := c.Connect()
 		if err != nil {
 			c.logger.Error(nil, "Error connecting to server", err, "retry", i)
+			time.Sleep(3 * time.Second)
 			continue
+		} else {
+			break
 		}
-		time.Sleep(3 * time.Second)
 	}
 }
 
