@@ -42,6 +42,7 @@ type Client struct {
 	retryTimes int
 	logger     aprsutils.Logger
 	handler    func(packet string)
+	server     string
 	software   string
 	version    string
 	conn       net.Conn
@@ -80,6 +81,10 @@ func (c *Client) Uptime() time.Time {
 
 func (c *Client) Up() bool {
 	return c.up
+}
+
+func (c *Client) Server() string {
+	return c.server
 }
 
 // Option provides a basic option type
@@ -223,6 +228,7 @@ func (c *Client) receivePackets() {
 	reader := bufio.NewReader(c.conn)
 
 	bk := false
+	serverInfoCount := 0
 	for {
 		if bk {
 			c.up = false
@@ -264,6 +270,10 @@ func (c *Client) receivePackets() {
 			// Check prefix
 			if strings.HasPrefix(line, "#") {
 				c.logger.Info(nil, "Server info:", line)
+				if serverInfoCount == 0 {
+					c.server = strings.TrimPrefix(line, "# ")
+				}
+				serverInfoCount++
 				continue
 			}
 
