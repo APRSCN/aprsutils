@@ -12,12 +12,12 @@ import (
 	"github.com/APRSCN/aprsutils"
 )
 
-// Types is a ENUM type for client type
-type Types string
+// Mode is a ENUM type for client mode
+type Mode string
 
 const (
-	Fullfeed Types = "fullfeed"
-	IGate    Types = "igate"
+	Fullfeed Mode = "fullfeed"
+	IGate    Mode = "igate"
 )
 
 // Protocol is a ENUM type for client protocol
@@ -33,7 +33,7 @@ type Client struct {
 	callsign   string
 	passcode   string
 	filter     string
-	typ        Types
+	mode       Mode
 	protocol   Protocol
 	host       string
 	port       int
@@ -59,8 +59,8 @@ func (c *Client) Filter() string {
 	return c.filter
 }
 
-func (c *Client) Typ() Types {
-	return c.typ
+func (c *Client) Mode() Mode {
+	return c.mode
 }
 
 func (c *Client) Protocol() Protocol {
@@ -129,7 +129,7 @@ func WithRetryTimes(retryTimes int) Option {
 // NewClient creates a new APRS client
 func NewClient(
 	callsign string, passcode string,
-	typ Types, protocol Protocol,
+	mode Mode, protocol Protocol,
 	host string, port int,
 	options ...Option,
 ) *Client {
@@ -137,7 +137,7 @@ func NewClient(
 	c := &Client{
 		callsign: callsign,
 		passcode: passcode,
-		typ:      typ,
+		mode:     mode,
 		protocol: protocol,
 		host:     host,
 		port:     port,
@@ -196,7 +196,7 @@ func (c *Client) login() error {
 	}
 	loginStr := fmt.Sprintf("user %s%s vers %s %s", c.callsign, passcodeString, c.software, c.version)
 	// Maybe have a filter?
-	if c.typ != Fullfeed && c.filter != "" {
+	if c.mode != Fullfeed && c.filter != "" {
 		loginStr += fmt.Sprintf(" filter %s", c.filter)
 	}
 	loginStr += "\r\n"
