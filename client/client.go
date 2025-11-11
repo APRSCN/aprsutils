@@ -30,19 +30,20 @@ const (
 
 // Client provides a basic struct of client object
 type Client struct {
-	Callsign string `json:"callsign"`
-	passcode string
-	Filter   string   `json:"filter"`
-	Type     Types    `json:"type"`
-	Protocol Protocol `json:"protocol"`
-	Host     string   `json:"host"`
-	Port     int      `json:"port"`
-	logger   aprsutils.Logger
-	handler  func(packet string)
-	software string
-	version  string
-	conn     net.Conn
-	done     chan bool
+	Callsign   string `json:"callsign"`
+	passcode   string
+	Filter     string   `json:"filter"`
+	Type       Types    `json:"type"`
+	Protocol   Protocol `json:"protocol"`
+	Host       string   `json:"host"`
+	Port       int      `json:"port"`
+	retryTimes int
+	logger     aprsutils.Logger
+	handler    func(packet string)
+	software   string
+	version    string
+	conn       net.Conn
+	done       chan bool
 }
 
 // Option provides a basic option type
@@ -77,6 +78,13 @@ func WithFilter(filter string) Option {
 	}
 }
 
+// WithRetryTimes sets a retry times to custom
+func WithRetryTimes(retryTimes int) Option {
+	return func(c *Client) {
+		c.retryTimes = retryTimes
+	}
+}
+
 // NewClient creates a new APRS client
 func NewClient(
 	callsign string, passcode string,
@@ -107,6 +115,9 @@ func NewClient(
 	// Set default handler
 	client.handler = client.handlePacket
 
+	// Set default retry times
+	client.retryTimes = 5
+
 	// Apply options
 	for _, option := range options {
 		option(client)
@@ -128,11 +139,13 @@ func (c *Client) Connect() error {
 
 	c.conn = conn
 	c.logger.Info(nil, "Connected to", address)
-	return nil
+
+	// Return and login
+	return c.login()
 }
 
 // Login to an APRS server
-func (c *Client) Login() error {
+func (c *Client) login() error {
 	// Construct login string
 	passcodeString := ""
 	if c.passcode != "" {
@@ -152,18 +165,30 @@ func (c *Client) Login() error {
 		return err
 	}
 
+	// Check passcode
 	if strconv.Itoa(aprsutils.Passcode(c.Callsign)) == c.passcode {
 		c.logger.Info(nil, "Logged in as", c.Callsign)
 	}
+
+	// Start packet receiving
+	go c.receivePackets()
+
+	// Start heartbeat
+	go c.heartBeat()
+
 	return nil
 }
 
-// ReceivePackets receives packet from the APRS server
-func (c *Client) ReceivePackets() {
+// receivePackets receives packet from the APRS server
+func (c *Client) receivePackets() {
 	// Create a reader
 	reader := bufio.NewReader(c.conn)
 
+	bk := false
 	for {
+		if bk {
+			break
+		}
 		select {
 		case <-c.done:
 			return
@@ -172,7 +197,7 @@ func (c *Client) ReceivePackets() {
 			err := c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 			if err != nil {
 				c.logger.Error(nil, "Error setting read deadline (timeout)", err)
-				return
+				bk = true
 			}
 
 			// Read string from reader
@@ -185,10 +210,10 @@ func (c *Client) ReceivePackets() {
 				}
 				if err.Error() == "EOF" {
 					c.logger.Warn(nil, "Server closed the connection")
-					return
+					bk = true
 				}
 				c.logger.Error(nil, "Error reading from server", err)
-				return
+				bk = true
 			}
 
 			// Trim space
@@ -206,6 +231,16 @@ func (c *Client) ReceivePackets() {
 			// Handle packet
 			c.handler(line)
 		}
+	}
+
+	// Reconnect
+	for i := 0; i < c.retryTimes; i++ {
+		err := c.Connect()
+		if err != nil {
+			c.logger.Error(nil, "Error connecting to server", err, "retry", i)
+			continue
+		}
+		time.Sleep(5 * time.Second)
 	}
 }
 
@@ -245,8 +280,8 @@ func (c *Client) SendPacket(packet string) error {
 	return nil
 }
 
-// HeartBeat sends heart beat to keep alive
-func (c *Client) HeartBeat() {
+// heartBeat sends heart beat to keep alive
+func (c *Client) heartBeat() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
