@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/APRSCN/aprsutils"
@@ -45,8 +46,12 @@ type Client struct {
 	server     string
 	software   string
 	version    string
-	conn       net.Conn
-	done       chan bool
+
+	conn net.Conn
+
+	mu     sync.Mutex
+	done   chan struct{}
+	closed bool
 }
 
 // Export data
@@ -143,6 +148,7 @@ func NewClient(
 		port:     port,
 		software: aprsutils.Name,
 		version:  aprsutils.Version,
+		done:     make(chan struct{}),
 	}
 
 	// Check callsign
@@ -169,6 +175,14 @@ func NewClient(
 
 // Connect to an APRS server
 func (c *Client) Connect() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Check client closed
+	if c.closed {
+		return errors.New("client is closed")
+	}
+
 	// Build address
 	address := net.JoinHostPort(c.host, strconv.Itoa(c.port))
 
@@ -280,18 +294,33 @@ root:
 
 	// Update status
 	c.up = false
+
+	// Check closed
+	select {
+	case <-c.done:
+		return
+	default:
+	}
+
 	// Debounce
 	time.Sleep(1 * time.Second)
 
 	// Reconnect
 	for i := 0; i < c.retryTimes; i++ {
+		// Check closed
+		select {
+		case <-c.done:
+			return
+		default:
+		}
+
 		err := c.Connect()
 		if err != nil {
-			c.logger.Error(nil, "Error connecting to server", err, "retry", i)
+			c.logger.Error(nil, "Error connecting to server", err, " retry ", i)
 			time.Sleep(3 * time.Second)
 			continue
 		} else {
-			break
+			return
 		}
 	}
 }
@@ -320,6 +349,13 @@ func (c *Client) handlePacket(packet string) {
 
 // SendPacket sends an APRS packet
 func (c *Client) SendPacket(packet string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.conn == nil || c.closed {
+		return errors.New("client is closed or not connected")
+	}
+
 	// Construct packet
 	fullPacket := packet + "\r\n"
 	_, err := c.conn.Write([]byte(fullPacket))
@@ -342,6 +378,14 @@ func (c *Client) heartBeat() {
 		case <-c.done:
 			return
 		case <-ticker.C:
+			// Check connection
+			c.mu.Lock()
+			if c.conn == nil || c.closed {
+				c.mu.Unlock()
+				return
+			}
+			c.mu.Unlock()
+
 			ping := fmt.Sprintf("# %s keepalive %d", c.software, time.Now().Unix())
 			_ = c.SendPacket(ping)
 		}
@@ -350,16 +394,28 @@ func (c *Client) heartBeat() {
 
 // Close a client
 func (c *Client) Close() {
-	close(c.done)
-	for {
-		if c.conn != nil {
-			err := c.conn.Close()
-			if err != nil {
-				c.logger.Error(nil, "Error closing connection ", err)
-				continue
-			}
-			c.logger.Info(nil, "client closed")
-			break
-		}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.closed {
+		return
 	}
+
+	c.closed = true
+	close(c.done)
+
+	if c.conn != nil {
+		err := c.conn.Close()
+		if err != nil {
+			c.logger.Error(nil, "Error closing connection ", err)
+		} else {
+			c.logger.Info(nil, "client closed")
+		}
+		c.conn = nil
+	}
+}
+
+// Wait the client exit
+func (c *Client) Wait() {
+	<-c.done
 }
