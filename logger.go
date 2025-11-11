@@ -2,6 +2,7 @@ package aprsutils
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 )
@@ -29,20 +30,20 @@ type defaultLogger struct {
 
 // Debug build Debug level log
 func (l defaultLogger) Debug(ctx context.Context, args ...interface{}) {
-	l.logger.Printf("[Debug] %v", args)
+	l.logger.Printf("[Debug] %s", fmt.Sprint(args...))
 }
 
 // Info build Info level log
 func (l defaultLogger) Info(ctx context.Context, args ...interface{}) {
-	l.logger.Printf("[Info] %v", args)
+	l.logger.Printf("[Info] %s", fmt.Sprint(args...))
 }
 
 // Warn build Warn level log
 func (l defaultLogger) Warn(ctx context.Context, args ...interface{}) {
-	l.logger.Printf("[Warn] %v", args)
+	l.logger.Printf("[Warn] %s", fmt.Sprint(args...))
 }
 
 // Error build Error level log
 func (l defaultLogger) Error(ctx context.Context, args ...interface{}) {
-	l.logger.Printf("[Error] %v", args)
+	l.logger.Printf("[Error] %s", fmt.Sprint(args...))
 }

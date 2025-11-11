@@ -181,7 +181,7 @@ func (c *Client) Connect() error {
 	c.uptime = time.Now()
 
 	c.conn = conn
-	c.logger.Info(nil, "Connected to", address)
+	c.logger.Info(nil, "Connected to ", address)
 
 	// Return and login
 	return c.login()
@@ -210,7 +210,7 @@ func (c *Client) login() error {
 
 	// Check passcode
 	if strconv.Itoa(aprsutils.Passcode(c.callsign)) == c.passcode {
-		c.logger.Info(nil, "Logged in as", c.callsign)
+		c.logger.Info(nil, "Logged in as ", c.callsign)
 	}
 
 	// Start packet receiving
@@ -241,7 +241,7 @@ func (c *Client) receivePackets() {
 			// Set timeout
 			err := c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 			if err != nil {
-				c.logger.Error(nil, "Error setting read deadline (timeout)", err)
+				c.logger.Error(nil, "Error setting read deadline (timeout) ", err)
 				bk = true
 			}
 
@@ -257,7 +257,7 @@ func (c *Client) receivePackets() {
 					c.logger.Warn(nil, "Server closed the connection")
 					bk = true
 				}
-				c.logger.Error(nil, "Error reading from server", err)
+				c.logger.Error(nil, "Error reading from server ", err)
 				bk = true
 			}
 
@@ -269,7 +269,7 @@ func (c *Client) receivePackets() {
 
 			// Check prefix
 			if strings.HasPrefix(line, "#") {
-				c.logger.Info(nil, "Server info:", line)
+				c.logger.Debug(nil, "Server info: ", line)
 				if serverInfoCount == 0 {
 					c.server = strings.TrimPrefix(line, "# ")
 				}
@@ -311,8 +311,8 @@ func (c *Client) handlePacket(packet string) {
 	path := pathData[0]
 	data := pathData[1]
 
-	c.logger.Debug(nil, "Raw packet received:", packet)
-	c.logger.Info(nil, "APRS packet - Sender:", sender, ", Path:", path, ", Data:", data)
+	c.logger.Debug(nil, "Raw packet received: ", packet)
+	c.logger.Info(nil, "APRS packet - Sender: ", sender, ", Path: ", path, ", Data: ", data)
 }
 
 // SendPacket sends an APRS packet
@@ -321,11 +321,11 @@ func (c *Client) SendPacket(packet string) error {
 	fullPacket := packet + "\r\n"
 	_, err := c.conn.Write([]byte(fullPacket))
 	if err != nil {
-		c.logger.Error(nil, "Error send packet:", err)
+		c.logger.Error(nil, "Error send packet: ", err)
 		return err
 	}
 
-	c.logger.Debug(nil, "Sent packet:", packet)
+	c.logger.Debug(nil, "Sent packet: ", packet)
 	return nil
 }
 
@@ -352,7 +352,7 @@ func (c *Client) Close() {
 		if c.conn != nil {
 			err := c.conn.Close()
 			if err != nil {
-				c.logger.Error(nil, "Error closing connection", err)
+				c.logger.Error(nil, "Error closing connection ", err)
 				continue
 			}
 			c.logger.Info(nil, "client closed")
