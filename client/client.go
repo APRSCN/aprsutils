@@ -387,7 +387,20 @@ func (c *Client) heartBeat() {
 			c.mu.Unlock()
 
 			ping := fmt.Sprintf("# %s keepalive %d", c.software, time.Now().Unix())
-			_ = c.SendPacket(ping)
+			err := c.SendPacket(ping)
+			if err != nil {
+				c.logger.Error(nil, "Heartbeat failed, connection may be closed")
+
+				// Close connection
+				c.mu.Lock()
+				if c.conn != nil {
+					_ = c.conn.Close()
+					c.conn = nil
+					c.up = false
+				}
+				c.mu.Unlock()
+				return
+			}
 		}
 	}
 }
