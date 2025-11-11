@@ -243,6 +243,8 @@ func (c *Client) receivePackets() {
 			if err != nil {
 				c.logger.Error(nil, "Error setting read deadline (timeout) ", err)
 				bk = true
+				// Debounce
+				time.Sleep(1 * time.Second)
 			}
 
 			// Read string from reader
@@ -256,9 +258,13 @@ func (c *Client) receivePackets() {
 				if err.Error() == "EOF" {
 					c.logger.Warn(nil, "Server closed the connection")
 					bk = true
+					// Debounce
+					time.Sleep(1 * time.Second)
 				}
 				c.logger.Error(nil, "Error reading from server ", err)
 				bk = true
+				// Debounce
+				time.Sleep(1 * time.Second)
 			}
 
 			// Trim space
@@ -289,7 +295,7 @@ func (c *Client) receivePackets() {
 			c.logger.Error(nil, "Error connecting to server", err, "retry", i)
 			continue
 		}
-		time.Sleep(5 * time.Second)
+		time.Sleep(3 * time.Second)
 	}
 }
 
