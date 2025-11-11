@@ -28,15 +28,17 @@ const (
 	UDP Protocol = "udp"
 )
 
-// Client provides a basic struct of client object
+// Client provides a basic struct of Client object
 type Client struct {
-	Callsign   string `json:"callsign"`
+	callsign   string
 	passcode   string
-	Filter     string   `json:"filter"`
-	Type       Types    `json:"type"`
-	Protocol   Protocol `json:"protocol"`
-	Host       string   `json:"host"`
-	Port       int      `json:"port"`
+	filter     string
+	typ        Types
+	protocol   Protocol
+	host       string
+	port       int
+	uptime     time.Time
+	up         bool
 	retryTimes int
 	logger     aprsutils.Logger
 	handler    func(packet string)
@@ -44,6 +46,40 @@ type Client struct {
 	version    string
 	conn       net.Conn
 	done       chan bool
+}
+
+// Export data
+
+func (c *Client) Callsign() string {
+	return c.callsign
+}
+
+func (c *Client) Filter() string {
+	return c.filter
+}
+
+func (c *Client) Typ() Types {
+	return c.typ
+}
+
+func (c *Client) Protocol() Protocol {
+	return c.protocol
+}
+
+func (c *Client) Host() string {
+	return c.host
+}
+
+func (c *Client) Port() int {
+	return c.port
+}
+
+func (c *Client) Uptime() time.Time {
+	return c.uptime
+}
+
+func (c *Client) Up() bool {
+	return c.up
 }
 
 // Option provides a basic option type
@@ -74,7 +110,7 @@ func WithSoftwareAndVersion(software string, version string) Option {
 // WithFilter sets a filter to the client
 func WithFilter(filter string) Option {
 	return func(c *Client) {
-		c.Filter = filter
+		c.filter = filter
 	}
 }
 
@@ -93,49 +129,51 @@ func NewClient(
 	options ...Option,
 ) *Client {
 	// Create client
-	client := &Client{
-		Callsign: callsign,
+	c := &Client{
+		callsign: callsign,
 		passcode: passcode,
-		Type:     typ,
-		Protocol: protocol,
-		Host:     host,
-		Port:     port,
+		typ:      typ,
+		protocol: protocol,
+		host:     host,
+		port:     port,
 		software: aprsutils.Name,
 		version:  aprsutils.Version,
 	}
 
 	// Check callsign
 	if callsign == "" {
-		client.Callsign = "N0CALL"
+		c.callsign = "N0CALL"
 	}
 
 	// Load default logger
-	client.logger = aprsutils.NewLogger()
+	c.logger = aprsutils.NewLogger()
 
 	// Set default handler
-	client.handler = client.handlePacket
+	c.handler = c.handlePacket
 
 	// Set default retry times
-	client.retryTimes = 5
+	c.retryTimes = 5
 
 	// Apply options
 	for _, option := range options {
-		option(client)
+		option(c)
 	}
 
-	return client
+	return c
 }
 
 // Connect to an APRS server
 func (c *Client) Connect() error {
 	// Build address
-	address := net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
+	address := net.JoinHostPort(c.host, strconv.Itoa(c.port))
 
 	// Try to create TCP connection
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		return err
 	}
+	c.up = true
+	c.uptime = time.Now()
 
 	c.conn = conn
 	c.logger.Info(nil, "Connected to", address)
@@ -151,10 +189,10 @@ func (c *Client) login() error {
 	if c.passcode != "" {
 		passcodeString = fmt.Sprintf(" pass %s", c.passcode)
 	}
-	loginStr := fmt.Sprintf("user %s%s vers %s %s", c.Callsign, passcodeString, c.software, c.version)
+	loginStr := fmt.Sprintf("user %s%s vers %s %s", c.callsign, passcodeString, c.software, c.version)
 	// Maybe have a filter?
-	if c.Type != Fullfeed && c.Filter != "" {
-		loginStr += fmt.Sprintf(" filter %s", c.Filter)
+	if c.typ != Fullfeed && c.filter != "" {
+		loginStr += fmt.Sprintf(" filter %s", c.filter)
 	}
 	loginStr += "\r\n"
 
@@ -166,8 +204,8 @@ func (c *Client) login() error {
 	}
 
 	// Check passcode
-	if strconv.Itoa(aprsutils.Passcode(c.Callsign)) == c.passcode {
-		c.logger.Info(nil, "Logged in as", c.Callsign)
+	if strconv.Itoa(aprsutils.Passcode(c.callsign)) == c.passcode {
+		c.logger.Info(nil, "Logged in as", c.callsign)
 	}
 
 	// Start packet receiving
@@ -187,6 +225,7 @@ func (c *Client) receivePackets() {
 	bk := false
 	for {
 		if bk {
+			c.up = false
 			break
 		}
 		select {
@@ -306,7 +345,7 @@ func (c *Client) Close() {
 				c.logger.Error(nil, "Error closing connection", err)
 				continue
 			}
-			c.logger.Info(nil, "Client closed")
+			c.logger.Info(nil, "client closed")
 			break
 		}
 	}
