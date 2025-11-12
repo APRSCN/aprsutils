@@ -115,6 +115,10 @@ func (c *Client) Server() string {
 
 // GetStats returns the current statistics
 func (c *Client) GetStats() Stats {
+	if c == nil {
+		return Stats{}
+	}
+
 	c.statsMu.RLock()
 	defer c.statsMu.RUnlock()
 
