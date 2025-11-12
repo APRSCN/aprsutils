@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/APRSCN/aprsutils"
@@ -28,6 +29,18 @@ const (
 	TCP Protocol = "tcp"
 	UDP Protocol = "udp"
 )
+
+// Stats contains statistics for the client
+type Stats struct {
+	TotalSentBytes  uint64        `json:"totalSentBytes"`
+	TotalRecvBytes  uint64        `json:"totalRecvBytes"`
+	CurrentSentRate uint64        `json:"currentSentRate"`
+	CurrentRecvRate uint64        `json:"currentRecvRate"`
+	PacketsSent     uint64        `json:"packetsSent"`
+	PacketsReceived uint64        `json:"packetsReceived"`
+	ConnectionTime  time.Duration `json:"connectionTime"`
+	LastActivity    time.Time     `json:"lastActivity"`
+}
 
 // Client provides a basic struct of Client object
 type Client struct {
@@ -52,6 +65,14 @@ type Client struct {
 	mu     sync.Mutex
 	done   chan struct{}
 	closed bool
+
+	// Statistics fields
+	statsMu         sync.RWMutex
+	stats           Stats
+	currentSent     uint64
+	currentRecv     uint64
+	lastStatsUpdate time.Time
+	lastActivity    time.Time
 }
 
 // Export data
@@ -90,6 +111,35 @@ func (c *Client) Up() bool {
 
 func (c *Client) Server() string {
 	return c.server
+}
+
+// GetStats returns the current statistics
+func (c *Client) GetStats() Stats {
+	c.statsMu.RLock()
+	defer c.statsMu.RUnlock()
+
+	// Update connection time
+	if c.up && !c.uptime.IsZero() {
+		c.stats.ConnectionTime = time.Since(c.uptime)
+	}
+
+	// Update last activity
+	if !c.lastActivity.IsZero() {
+		c.stats.LastActivity = c.lastActivity
+	}
+
+	return c.stats
+}
+
+// ResetStats resets all statistics to zero
+func (c *Client) ResetStats() {
+	c.statsMu.Lock()
+	defer c.statsMu.Unlock()
+
+	c.stats = Stats{}
+	c.currentSent = 0
+	c.currentRecv = 0
+	c.lastStatsUpdate = time.Now()
 }
 
 // Option provides a basic option type
@@ -140,15 +190,16 @@ func NewClient(
 ) *Client {
 	// Create client
 	c := &Client{
-		callsign: callsign,
-		passcode: passcode,
-		mode:     mode,
-		protocol: protocol,
-		host:     host,
-		port:     port,
-		software: aprsutils.Name,
-		version:  aprsutils.Version,
-		done:     make(chan struct{}),
+		callsign:        callsign,
+		passcode:        passcode,
+		mode:            mode,
+		protocol:        protocol,
+		host:            host,
+		port:            port,
+		software:        aprsutils.Name,
+		version:         aprsutils.Version,
+		done:            make(chan struct{}),
+		lastStatsUpdate: time.Now(),
 	}
 
 	// Check callsign
@@ -193,9 +244,13 @@ func (c *Client) Connect() error {
 	}
 	c.up = true
 	c.uptime = time.Now()
+	c.lastActivity = time.Now()
 
 	c.conn = conn
 	c.logger.Info(nil, "Connected to ", address)
+
+	// Start statistics updater
+	go c.updateStats()
 
 	// Return and login
 	return c.login()
@@ -216,11 +271,15 @@ func (c *Client) login() error {
 	loginStr += "\r\n"
 
 	// Send login request
-	_, err := c.conn.Write([]byte(loginStr))
+	sent, err := c.conn.Write([]byte(loginStr))
 	if err != nil {
 		c.logger.Error(nil, "Error writing login command to ", c.conn.RemoteAddr().String(), err)
 		return err
 	}
+
+	// Update statistics
+	c.updateSentStats(sent)
+	atomic.AddUint64(&c.stats.PacketsSent, 1)
 
 	// Check passcode
 	if strconv.Itoa(aprsutils.Passcode(c.callsign)) == c.passcode {
@@ -234,6 +293,50 @@ func (c *Client) login() error {
 	go c.heartBeat()
 
 	return nil
+}
+
+// updateSentStats updates sent bytes statistics
+func (c *Client) updateSentStats(bytes int) {
+	atomic.AddUint64(&c.stats.TotalSentBytes, uint64(bytes))
+	atomic.AddUint64(&c.currentSent, uint64(bytes))
+	c.lastActivity = time.Now()
+}
+
+// updateRecvStats updates received bytes statistics
+func (c *Client) updateRecvStats(bytes int) {
+	atomic.AddUint64(&c.stats.TotalRecvBytes, uint64(bytes))
+	atomic.AddUint64(&c.currentRecv, uint64(bytes))
+	atomic.AddUint64(&c.stats.PacketsReceived, 1)
+	c.lastActivity = time.Now()
+}
+
+// updateStats periodically updates the current rate statistics
+func (c *Client) updateStats() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-ticker.C:
+			c.statsMu.Lock()
+			now := time.Now()
+			elapsed := now.Sub(c.lastStatsUpdate).Seconds()
+
+			if elapsed > 0 {
+				// Calculate current rates
+				currentSent := atomic.SwapUint64(&c.currentSent, 0)
+				currentRecv := atomic.SwapUint64(&c.currentRecv, 0)
+
+				c.stats.CurrentSentRate = uint64(float64(currentSent) / elapsed)
+				c.stats.CurrentRecvRate = uint64(float64(currentRecv) / elapsed)
+			}
+
+			c.lastStatsUpdate = now
+			c.statsMu.Unlock()
+		}
+	}
 }
 
 // receivePackets receives packet from the APRS server
@@ -270,6 +373,9 @@ root:
 				c.logger.Error(nil, "Error reading from server ", err)
 				break root
 			}
+
+			// Update received bytes statistics
+			c.updateRecvStats(len(line))
 
 			// Trim space
 			line = strings.TrimSpace(line)
@@ -358,11 +464,15 @@ func (c *Client) SendPacket(packet string) error {
 
 	// Construct packet
 	fullPacket := packet + "\r\n"
-	_, err := c.conn.Write([]byte(fullPacket))
+	sent, err := c.conn.Write([]byte(fullPacket))
 	if err != nil {
 		c.logger.Error(nil, "Error send packet: ", err)
 		return err
 	}
+
+	// Update statistics
+	c.updateSentStats(sent)
+	atomic.AddUint64(&c.stats.PacketsSent, 1)
 
 	c.logger.Debug(nil, "Sent packet: ", packet)
 	return nil
