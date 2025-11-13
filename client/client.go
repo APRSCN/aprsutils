@@ -521,6 +521,10 @@ func (c *Client) heartBeat() {
 
 // Close a client
 func (c *Client) Close() {
+	if c == nil {
+		return
+	}
+	
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
