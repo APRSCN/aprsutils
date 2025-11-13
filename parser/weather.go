@@ -113,6 +113,8 @@ func (p *Parsed) parseWeatherData(body string) string {
 
 			valueStr = strings.ReplaceAll(valueStr, " ", "")
 
+			p.Weather = make(map[string]float64)
+
 			if keyFunc, ok := valMap[keyChar]; ok {
 				if keyName, ok := keyMap[keyChar]; ok {
 					p.Weather[keyName] = keyFunc(valueStr)
