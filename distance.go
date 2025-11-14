@@ -2,8 +2,8 @@ package aprsutils
 
 import "math"
 
-// CalculateDistance computes the distance between two coordinates using Vincenty inverse formula
-func CalculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
+// CalculateDistanceVincentyInverse computes the distance between two coordinates using Vincenty Inverse formula
+func CalculateDistanceVincentyInverse(lat1, lon1, lat2, lon2 float64) float64 {
 	// WGS-84 ellipsoid parameters
 	a := 6378137.0           // Semi-major axis in meters
 	b := 6356752.314245      // Semi-minor axis in meters
@@ -60,6 +60,23 @@ func CalculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
 	// Result is in meters, convert to kilometers
 	result := b * A * (sigma - deltaSigma) / 1000
 	return result
+}
+
+// CalculateDistanceHaversine computes the distance between two coordinates using Haversine formula
+func CalculateDistanceHaversine(lat1, lon1, lat2, lon2 float64) float64 {
+	var radLat1 = lat1 * math.Pi / 180
+	var radLat2 = lat2 * math.Pi / 180
+	var theta = lon1 - lon2
+	var radTheta = theta * math.Pi / 180
+	var dist = math.Sin(radLat1)*math.Sin(radLat2) + math.Cos(radLat1)*math.Cos(radLat2)*math.Cos(radTheta)
+	if dist > 1 {
+		dist = 1
+	}
+	dist = math.Acos(dist)
+	dist = dist * 180 / math.Pi
+	dist = dist * 60 * 1.1515
+	dist = dist * 1.609344
+	return dist
 }
 
 // toRadians converts degrees to radians
