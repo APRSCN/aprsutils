@@ -43,7 +43,7 @@ type QResult struct {
 }
 
 // QConstruct processes QConstruct
-func QConstruct(p *parser.Parsed, config *QConfig) (*QResult, error) {
+func QConstruct(p parser.Parsed, config *QConfig) (QResult, error) {
 	result := &QResult{
 		Path: make([]string, len(p.Path)),
 	}
@@ -54,7 +54,7 @@ func QConstruct(p *parser.Parsed, config *QConfig) (*QResult, error) {
 
 	// Check loop before all qConstruct
 	if result.checkForLoopsBeforeProcessing(config) {
-		return result, nil
+		return *result, nil
 	}
 
 	// Process based on connection type
@@ -74,11 +74,11 @@ func QConstruct(p *parser.Parsed, config *QConfig) (*QResult, error) {
 	// Apply final processing for all packets with q constructs
 	result.applyFinalProcessing(config)
 
-	return result, nil
+	return *result, nil
 }
 
 // applyInitialProcessing inits to processing packet
-func (r *QResult) applyInitialProcessing(p *parser.Parsed, config *QConfig) {
+func (r *QResult) applyInitialProcessing(p parser.Parsed, config *QConfig) {
 	// Remove q construct if it's last in path with no call following
 	if len(r.Path) > 0 {
 		lastElement := r.Path[len(r.Path)-1]
