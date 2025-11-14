@@ -1,8 +1,9 @@
 package aprsutils
 
 import (
-	"regexp"
 	"sync"
+
+	regexp "github.com/wasilibs/go-re2"
 )
 
 // compiledRegexp is the basic struct to save compiled regexp to accelerator
