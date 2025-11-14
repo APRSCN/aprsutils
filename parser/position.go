@@ -3,7 +3,6 @@ package parser
 import (
 	"errors"
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -20,7 +19,7 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 
 	// Attempt to parse object report format
 	if packetType == ";" {
-		matches := regexp.MustCompile(`^([ -~]{9})(\*|_)`).FindStringSubmatch(body)
+		matches := aprsutils.CompiledRegexps.Get(`^([ -~]{9})(\*|_)`).FindStringSubmatch(body)
 		if matches != nil && len(matches) >= 3 {
 			name := matches[1]
 			flag := matches[2]
@@ -86,7 +85,7 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 // parseCompressed parses compressed APRS packet
 func (p *Parsed) parseCompressed(body string) (string, error) {
 	// Attempt to parse as compressed position report
-	if regexp.MustCompile(`^[/\\A-Za-j][!-|]{8}[!-{}][ -|]{3}`).MatchString(body) {
+	if aprsutils.CompiledRegexps.Get(`^[/\\A-Za-j][!-|]{8}[!-{}][ -|]{3}`).MatchString(body) {
 		// Check length
 		if len(body) < 13 {
 			return body, errors.New("invalid compressed format")
@@ -155,7 +154,7 @@ func (p *Parsed) parseNormal(body string) (string, error) {
 	pattern := `^(\d{2})([0-9 ]{2}\.[0-9 ]{2})([NnSs])([\/\\0-9A-Z])` +
 		`(\d{3})([0-9 ]{2}\.[0-9 ]{2})([EeWw])([\x21-\x7e])(.*)$`
 
-	re := regexp.MustCompile(pattern)
+	re := aprsutils.CompiledRegexps.Get(pattern)
 	matches := re.FindStringSubmatch(body)
 
 	if matches == nil || len(matches) < 10 {

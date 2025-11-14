@@ -2,7 +2,6 @@ package parser
 
 import (
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -33,7 +32,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 	// Page 27 of the spec
 	// Format: 111/222/333/444text
 	pattern1 := `^([0-9 \.]{3})/([0-9 \.]{3})`
-	re1 := regexp.MustCompile(pattern1)
+	re1 := aprsutils.CompiledRegexps.Get(pattern1)
 	matches := re1.FindStringSubmatch(body)
 
 	if matches != nil && len(matches) >= 3 {
@@ -57,7 +56,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 		// DF Report format
 		// Page 29 of teh spec
 		pattern2 := `^/([0-9 \.]{3})/([0-9 \.]{3})`
-		re2 := regexp.MustCompile(pattern2)
+		re2 := aprsutils.CompiledRegexps.Get(pattern2)
 		matches2 := re2.FindStringSubmatch(body)
 
 		if matches2 != nil && len(matches2) >= 3 {
@@ -83,7 +82,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 		// PHG format: PHGabcd....
 		// RHGR format: RHGabcdr/....
 		pattern3 := `^(PHG(\d[\x30-\x7e]\d\d)([0-9A-Z]\/)?)`
-		re3 := regexp.MustCompile(pattern3)
+		re3 := aprsutils.CompiledRegexps.Get(pattern3)
 		matches3 := re3.FindStringSubmatch(body)
 
 		if matches3 != nil && len(matches3) >= 4 {
@@ -126,7 +125,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 			}
 		} else {
 			pattern4 := `^RNG(\d{4})`
-			re4 := regexp.MustCompile(pattern4)
+			re4 := aprsutils.CompiledRegexps.Get(pattern4)
 			matches4 := re4.FindStringSubmatch(body)
 
 			if matches4 != nil && len(matches4) >= 2 {
@@ -144,7 +143,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 // parseCommentAltitude parses comment altitude from APRS packet
 func (p *Parsed) parseCommentAltitude(body string) string {
 	pattern := `^(.*?)/A=(\-\d{5}|\d{6})(.*)$`
-	re := regexp.MustCompile(pattern)
+	re := aprsutils.CompiledRegexps.Get(pattern)
 	matches := re.FindStringSubmatch(body)
 
 	if matches != nil && len(matches) >= 4 {
@@ -159,7 +158,7 @@ func (p *Parsed) parseCommentAltitude(body string) string {
 // parseDAO parses DAO from APRS packet
 func (p *Parsed) parseDAO(body string) string {
 	pattern := `^(.*)\!([\x21-\x7b])([\x20-\x7b]{2})\!(.*?)$`
-	re := regexp.MustCompile(pattern)
+	re := aprsutils.CompiledRegexps.Get(pattern)
 	matches := re.FindStringSubmatch(body)
 
 	if matches != nil && len(matches) >= 5 {

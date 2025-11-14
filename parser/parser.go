@@ -3,9 +3,10 @@ package parser
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
+
+	"github.com/APRSCN/aprsutils"
 )
 
 func Parse(packet string) (Parsed, error) {
@@ -56,7 +57,7 @@ func (p *Parsed) parseTimeStamp(packetType string, body string) (string, error) 
 		return "", errors.New("invalid timestamp format")
 	}
 	// Match
-	matches := regexp.MustCompile(`^((\d{6})(.))$`).FindStringSubmatch(body[0:7])
+	matches := aprsutils.CompiledRegexps.Get(`^((\d{6})(.))$`).FindStringSubmatch(body[0:7])
 	if matches == nil || len(matches) < 4 {
 		return "", errors.New("invalid timestamp format")
 	}
