@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/APRSCN/aprsutils"
@@ -283,7 +282,7 @@ func (c *Client) login() error {
 
 	// Update statistics
 	c.updateSentStats(sent)
-	atomic.AddUint64(&c.stats.PacketsSent, 1)
+	c.stats.PacketsSent += 1
 
 	// Check passcode
 	if strconv.Itoa(aprsutils.Passcode(c.callsign)) == c.passcode {
@@ -301,16 +300,16 @@ func (c *Client) login() error {
 
 // updateSentStats updates sent bytes statistics
 func (c *Client) updateSentStats(bytes int) {
-	atomic.AddUint64(&c.stats.TotalSentBytes, uint64(bytes))
-	atomic.AddUint64(&c.currentSent, uint64(bytes))
+	c.stats.TotalSentBytes += uint64(bytes)
+	c.currentSent += uint64(bytes)
 	c.lastActivity = time.Now()
 }
 
 // updateRecvStats updates received bytes statistics
 func (c *Client) updateRecvStats(bytes int) {
-	atomic.AddUint64(&c.stats.TotalRecvBytes, uint64(bytes))
-	atomic.AddUint64(&c.currentRecv, uint64(bytes))
-	atomic.AddUint64(&c.stats.PacketsReceived, 1)
+	c.stats.TotalRecvBytes += uint64(bytes)
+	c.currentRecv += uint64(bytes)
+	c.stats.PacketsReceived += 1
 	c.lastActivity = time.Now()
 }
 
@@ -330,8 +329,10 @@ func (c *Client) updateStats() {
 
 			if elapsed > 0 {
 				// Calculate current rates
-				currentSent := atomic.SwapUint64(&c.currentSent, 0)
-				currentRecv := atomic.SwapUint64(&c.currentRecv, 0)
+				currentSent := c.currentSent
+				c.currentSent = 0
+				currentRecv := c.currentRecv
+				c.currentRecv = 0
 
 				c.stats.CurrentSentRate = uint64(float64(currentSent) / elapsed)
 				c.stats.CurrentRecvRate = uint64(float64(currentRecv) / elapsed)
@@ -476,7 +477,7 @@ func (c *Client) SendPacket(packet string) error {
 
 	// Update statistics
 	c.updateSentStats(sent)
-	atomic.AddUint64(&c.stats.PacketsSent, 1)
+	c.stats.PacketsSent += 1
 
 	c.logger.Debug(nil, "Sent packet: ", packet)
 	return nil
@@ -524,7 +525,7 @@ func (c *Client) Close() {
 	if c == nil {
 		return
 	}
-	
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
