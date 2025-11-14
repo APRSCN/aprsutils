@@ -38,7 +38,8 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 
 	// Decode timestamp
 	if strings.Contains("/@;", packetType) {
-		err := p.parseTimeStamp(packetType, body)
+		var err error
+		body, err = p.parseTimeStamp(packetType, body)
 		if err != nil {
 			return err
 		}
@@ -54,6 +55,9 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 	}
 	if len(p.Symbol) == 0 {
 		body, err = p.parseNormal(body)
+		if err != nil {
+			return err
+		}
 		if len(p.Symbol) == 0 {
 			return errors.New("invalid format")
 		}

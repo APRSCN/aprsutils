@@ -50,15 +50,15 @@ func Parse(packet string) (Parsed, error) {
 }
 
 // parseTimeStamp parses timestamp from APRS packet
-func (p *Parsed) parseTimeStamp(packetType string, body string) error {
+func (p *Parsed) parseTimeStamp(packetType string, body string) (string, error) {
 	// Check body length
 	if len(body) < 7 {
-		return errors.New("invalid timestamp format")
+		return "", errors.New("invalid timestamp format")
 	}
 	// Match
 	matches := regexp.MustCompile(`^((\d{6})(.))$`).FindStringSubmatch(body[0:7])
 	if matches == nil || len(matches) < 4 {
-		return errors.New("invalid timestamp format")
+		return "", errors.New("invalid timestamp format")
 	}
 
 	rawts, ts, form := matches[1], matches[2], matches[3]
@@ -93,7 +93,7 @@ func (p *Parsed) parseTimeStamp(packetType string, body string) error {
 	p.RawTimestamp = rawts
 	p.Timestamp = timestamp
 
-	return nil
+	return body, nil
 }
 
 func parseTimeString(timeStr, layout string) (int, error) {
