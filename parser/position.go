@@ -49,17 +49,16 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 	}
 
 	// Decode body
-	body, err := p.parseCompressed(body)
-	if err != nil {
-		return err
-	}
-	if len(p.Symbol) == 0 {
+	var err error
+	if aprsutils.CompiledRegexps.Get(`^[0-9\s]{4}\.[0-9\s]{2}[NS].[0-9\s]{5}\.[0-9\s]{2}[EW]`).MatchString(body) {
 		body, err = p.parseNormal(body)
 		if err != nil {
 			return err
 		}
-		if len(p.Symbol) == 0 {
-			return errors.New("invalid format")
+	} else {
+		body, err = p.parseCompressed(body)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -86,67 +85,65 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 // parseCompressed parses compressed APRS packet
 func (p *Parsed) parseCompressed(body string) (string, error) {
 	// Attempt to parse as compressed position report
-	if aprsutils.CompiledRegexps.Get(`^[/\\A-Za-j][!-|]{8}[!-{}][ -|]{3}`).MatchString(body) {
-		// Check length
-		if len(body) < 13 {
-			return body, errors.New("invalid compressed format")
-		}
-
-		// Set format
-		p.Format = "compressed"
-
-		compressed := string([]rune(body)[:13])
-		body = string([]rune(body)[13:])
-
-		symbolTable := string([]rune(compressed)[0])
-		symbol := string([]rune(compressed)[9])
-
-		base91Lat, err := aprsutils.ToDecimal(string([]rune(compressed)[1:5]))
-		if err != nil {
-			return body, err
-		}
-		base91Lon, err := aprsutils.ToDecimal(string([]rune(compressed)[5:9]))
-		if err != nil {
-			return body, err
-		}
-
-		latitude := 90 - (float64(base91Lat) / 380926)
-		longitude := -180 + (float64(base91Lon) / 190463)
-
-		c1 := int(compressed[10]) - 33
-		s1 := int(compressed[11]) - 33
-		ctype := int(compressed[12]) - 33
-
-		if c1 == -1 {
-			if ctype&0x20 == 0x20 {
-				p.GPSFixStatus = true
-			} else {
-				p.GPSFixStatus = false
-			}
-		}
-
-		if c1 == -1 || s1 == -1 {
-			// Do nothing
-		} else if ctype&0x18 == 0x10 {
-			p.Altitude = math.Pow(1.002, float64(c1*91+s1)) * 0.3048
-		} else if c1 >= 0 && c1 <= 89 {
-			course := 360
-			if c1 != 0 {
-				course = c1 * 4
-			}
-			speed := (math.Pow(1.08, float64(s1)) - 1) * 1.852 // From knts To kph
-
-			p.Course = float64(course)
-			p.Speed = speed
-		} else if c1 == 90 {
-			p.RadioRange = (2 * math.Pow(1.08, float64(s1))) * 1.609344
-		}
-
-		p.Symbol = []string{symbol, symbolTable}
-		p.Lon = longitude
-		p.Lat = latitude
+	// Check length
+	if len(body) < 13 {
+		return body, errors.New("invalid compressed format")
 	}
 
+	// Set format
+	p.Format = "compressed"
+
+	compressed := string([]rune(body)[:13])
+	body = string([]rune(body)[13:])
+
+	symbolTable := string([]rune(compressed)[0])
+	symbol := string([]rune(compressed)[9])
+
+	base91Lat, err := aprsutils.ToDecimal(string([]rune(compressed)[1:5]))
+	if err != nil {
+		return body, err
+	}
+	base91Lon, err := aprsutils.ToDecimal(string([]rune(compressed)[5:9]))
+	if err != nil {
+		return body, err
+	}
+
+	latitude := 90 - (float64(base91Lat) / 380926)
+	longitude := -180 + (float64(base91Lon) / 190463)
+
+	c1 := int(compressed[10]) - 33
+	s1 := int(compressed[11]) - 33
+	ctype := int(compressed[12]) - 33
+
+	if c1 == -1 {
+		if ctype&0x20 == 0x20 {
+			p.GPSFixStatus = true
+		} else {
+			p.GPSFixStatus = false
+		}
+	}
+
+	if c1 == -1 || s1 == -1 {
+		// Do nothing
+	} else if ctype&0x18 == 0x10 {
+		p.Altitude = math.Pow(1.002, float64(c1*91+s1)) * 0.3048
+	} else if c1 >= 0 && c1 <= 89 {
+		course := 360
+		if c1 != 0 {
+			course = c1 * 4
+		}
+		speed := (math.Pow(1.08, float64(s1)) - 1) * 1.852 // From knts To kph
+
+		p.Course = float64(course)
+		p.Speed = speed
+	} else if c1 == 90 {
+		p.RadioRange = (2 * math.Pow(1.08, float64(s1))) * 1.609344
+	}
+
+	p.Symbol = []string{symbol, symbolTable}
+	p.Lon = longitude
+	p.Lat = latitude
+	
 	return body, nil
 }
 
