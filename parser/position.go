@@ -38,7 +38,7 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 
 	// Decode timestamp
 	if strings.Contains("/@;", packetType) {
-		err := p.parseTimeStamp(body, packetType)
+		err := p.parseTimeStamp(packetType, body)
 		if err != nil {
 			return err
 		}
