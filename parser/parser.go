@@ -13,9 +13,12 @@ func Parse(packet string) (Parsed, error) {
 	// Create result
 	parsed := &Parsed{}
 
+	// Save raw packet
+	parsed.Raw = packet
+
 	// Check packet content
 	if packet == "" {
-		return Parsed{}, errors.New("packet is empty")
+		return *parsed, errors.New("packet is empty")
 	}
 
 	// Trim
@@ -24,27 +27,24 @@ func Parse(packet string) (Parsed, error) {
 	// Split head and body
 	head, body, ok := SplitOnce(packet, ":")
 	if !ok {
-		return Parsed{}, errors.New("packet has no body")
+		return *parsed, errors.New("packet has no body")
 	}
 
 	// Check body
 	if StringLen(head) == 0 || StringLen(body) == 0 {
-		return Parsed{}, errors.New("packet head or body is empty")
+		return *parsed, errors.New("packet head or body is empty")
 	}
-
-	// Save raw packet
-	parsed.Raw = packet
 
 	// Parse head
 	err := parsed.parseHeader(head)
 	if err != nil {
-		return Parsed{}, err
+		return *parsed, err
 	}
 
 	// Parse body
 	err = parsed.parseBody(body)
 	if err != nil {
-		return Parsed{}, err
+		return *parsed, err
 	}
 
 	return *parsed, nil
