@@ -205,13 +205,13 @@ func (p *Parsed) parseNormal(body string) (string, error) {
 	}
 
 	// From DDMM.MM to decimal
-	latMinFloat, err := strconv.ParseFloat(latMin, 64)
+	latMinFloat, err := strconv.ParseFloat(strings.TrimSpace(latMin), 64)
 	if err != nil {
 		return body, errors.New("invalid latitude minutes")
 	}
 	latitude := float64(latDegInt) + (latMinFloat / 60.0)
 
-	lonMinFloat, err := strconv.ParseFloat(lonMin, 64)
+	lonMinFloat, err := strconv.ParseFloat(strings.TrimSpace(lonMin), 64)
 	if err != nil {
 		return body, errors.New("invalid longitude minutes")
 	}
