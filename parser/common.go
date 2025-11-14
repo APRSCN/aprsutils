@@ -41,6 +41,16 @@ func (p *Parsed) parseHeader(head string) error {
 		return errors.New("invalid toCallsign in header")
 	}
 
+	// Remove space path
+	i := 0
+	for _, pa := range paths {
+		if strings.TrimSpace(pa) != "" {
+			paths[i] = pa
+			i++
+		}
+	}
+	paths = paths[:i]
+
 	// Check callsign in paths
 	for _, pa := range paths {
 		if !aprsutils.CompiledRegexps.Get(`(?i)^[A-Z0-9\-]{1,9}\*?$`).MatchString(pa) {
