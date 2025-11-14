@@ -55,15 +55,21 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 		if err != nil {
 			return err
 		}
-	} else {
+	}
+	if len(p.Symbol) < 2 {
 		body, err = p.parseCompressed(body)
 		if err != nil {
 			return err
 		}
 	}
 
+	// Check symbol
+	if len(p.Symbol) < 2 {
+		return errors.New("invalid symbol format")
+	}
+
 	// Check for weather info
-	if len(p.Symbol) > 1 && p.Symbol[0] == "_" {
+	if p.Symbol[0] == "_" {
 		// Attempt to parse winddir/speed
 		// Page 92 of the spec
 		body = p.parseDataExtensions(body)
