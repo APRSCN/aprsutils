@@ -44,7 +44,7 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 			return err
 		}
 	}
-	if utils.StringLen(body) == 0 && p.Timestamp == 0 {
+	if utils.StringLen(body) == 0 && p.Timestamp != 0 {
 		return errors.New("invalid timestamp format")
 	}
 
@@ -159,7 +159,7 @@ func (p *Parsed) parseNormal(body string) (string, error) {
 	matches := re.FindStringSubmatch(body)
 
 	if matches == nil || len(matches) < 10 {
-		return body, errors.New("invalid uncompressed format")
+		return body, nil
 	}
 
 	p.Format = "uncompressed"

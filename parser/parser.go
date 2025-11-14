@@ -55,12 +55,12 @@ func Parse(packet string) (Parsed, error) {
 func (p *Parsed) parseTimeStamp(packetType string, body string) (string, error) {
 	// Check body length
 	if len(body) < 7 {
-		return "", errors.New("invalid timestamp format")
+		return body, errors.New("invalid timestamp format")
 	}
 	// Match
 	matches := aprsutils.CompiledRegexps.Get(`^((\d{6})(.))$`).FindStringSubmatch(body[0:7])
 	if matches == nil || len(matches) < 4 {
-		return "", errors.New("invalid timestamp format")
+		return body, nil
 	}
 
 	rawts, ts, form := matches[1], matches[2], matches[3]
