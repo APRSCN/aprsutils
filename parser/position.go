@@ -63,7 +63,7 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 	}
 
 	// Check for weather info
-	if p.Symbol[0] == "_" {
+	if len(p.Symbol) > 1 && p.Symbol[0] == "_" {
 		// Attempt to parse winddir/speed
 		// Page 92 of the spec
 		body = p.parseDataExtensions(body)
@@ -143,7 +143,7 @@ func (p *Parsed) parseCompressed(body string) (string, error) {
 	p.Symbol = []string{symbol, symbolTable}
 	p.Lon = longitude
 	p.Lat = latitude
-	
+
 	return body, nil
 }
 
