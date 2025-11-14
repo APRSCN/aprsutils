@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/APRSCN/aprsutils"
+	"github.com/APRSCN/aprsutils/utils"
 )
 
 // parseComment parses comment from APRS packet
@@ -39,7 +40,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 		cse, spd := matches[1], matches[2]
 		body = body[7:]
 
-		if isDigit(cse) && cse != "000" {
+		if utils.IsDigit(cse) && cse != "000" {
 			cseInt, _ := strconv.Atoi(cse)
 			if cseInt >= 1 && cseInt <= 360 {
 				p.Course = float64(cseInt)
@@ -48,7 +49,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 			}
 		}
 
-		if isDigit(spd) && spd != "000" {
+		if utils.IsDigit(spd) && spd != "000" {
 			spdInt, _ := strconv.Atoi(spd)
 			p.Speed = float64(spdInt) * 1.852
 		}
@@ -68,12 +69,12 @@ func (p *Parsed) parseDataExtensions(body string) string {
 			brg, nrq := matches2[1], matches2[2]
 			body = body[8:]
 
-			if isDigit(brg) {
+			if utils.IsDigit(brg) {
 				brgInt, _ := strconv.Atoi(brg)
 				p.Bearing = brgInt
 			}
 
-			if isDigit(nrq) {
+			if utils.IsDigit(nrq) {
 				nrqInt, _ := strconv.Atoi(nrq)
 				p.NRQ = nrqInt
 			}
@@ -168,7 +169,7 @@ func (p *Parsed) parseDAO(body string) string {
 		p.DAODatumByte = strings.ToUpper(daobyte)
 		latOffset, lonOffset := 0.0, 0.0
 
-		if daobyte == "W" && isDigit(dao) {
+		if daobyte == "W" && utils.IsDigit(dao) {
 			dao0, _ := strconv.Atoi(string(dao[0]))
 			dao1, _ := strconv.Atoi(string(dao[1]))
 			latOffset = float64(dao0) * 0.001 / 60

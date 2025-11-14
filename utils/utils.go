@@ -1,4 +1,4 @@
-package parser
+package utils
 
 import "strings"
 
@@ -16,8 +16,8 @@ func StringLen(s string) int {
 	return len([]rune(s))
 }
 
-// isDigit checks whether a string only contains numbers
-func isDigit(s string) bool {
+// IsDigit checks whether a string only contains numbers
+func IsDigit(s string) bool {
 	for _, c := range s {
 		if c < '0' || c > '9' {
 			return false

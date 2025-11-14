@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/APRSCN/aprsutils"
+	"github.com/APRSCN/aprsutils/utils"
 )
 
 func Parse(packet string) (Parsed, error) {
@@ -25,13 +26,13 @@ func Parse(packet string) (Parsed, error) {
 	packet = strings.Trim(packet, "\r\n")
 
 	// Split head and body
-	head, body, ok := SplitOnce(packet, ":")
+	head, body, ok := utils.SplitOnce(packet, ":")
 	if !ok {
 		return *parsed, errors.New("packet has no body")
 	}
 
 	// Check body
-	if StringLen(head) == 0 || StringLen(body) == 0 {
+	if utils.StringLen(head) == 0 || utils.StringLen(body) == 0 {
 		return *parsed, errors.New("packet head or body is empty")
 	}
 

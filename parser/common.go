@@ -5,18 +5,19 @@ import (
 	"strings"
 
 	"github.com/APRSCN/aprsutils"
+	"github.com/APRSCN/aprsutils/utils"
 )
 
 // parseHeader parses header of APRS packet
 func (p *Parsed) parseHeader(head string) error {
 	// Split fromCall and path
-	fromCall, path, ok := SplitOnce(head, ">")
+	fromCall, path, ok := utils.SplitOnce(head, ">")
 	if !ok {
 		return errors.New("invalid packet header")
 	}
 
 	// Check fromCall
-	if !(1 <= StringLen(fromCall) && StringLen(fromCall) <= 9) ||
+	if !(1 <= utils.StringLen(fromCall) && utils.StringLen(fromCall) <= 9) ||
 		!aprsutils.CompiledRegexps.Get(`(?i)^[a-z0-9]{0,9}(-[a-z0-9]{1,8})?$`).MatchString(fromCall) {
 		return errors.New("fromCallsign is invalid")
 	}
@@ -28,7 +29,7 @@ func (p *Parsed) parseHeader(head string) error {
 	}
 
 	// Check toCall
-	if StringLen(paths[0]) == 0 {
+	if utils.StringLen(paths[0]) == 0 {
 		return errors.New("no toCallsign in header")
 	}
 
@@ -72,7 +73,7 @@ func (p *Parsed) parseBody(body string) error {
 	packetType := string([]rune(body)[0:1])
 	body = string([]rune(body)[1:])
 
-	if StringLen(body) == 0 && packetType != ">" {
+	if utils.StringLen(body) == 0 && packetType != ">" {
 		return errors.New("packet body is empty after packet type character")
 	}
 

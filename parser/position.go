@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/APRSCN/aprsutils"
+	"github.com/APRSCN/aprsutils/utils"
 )
 
 // parsePosition parses position format APRS packet
@@ -14,7 +15,7 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 	// Check format
 	if !strings.Contains("!=/@;", packetType) {
 		packetType = "!"
-		_, body, _ = SplitOnce(body, "!")
+		_, body, _ = utils.SplitOnce(body, "!")
 	}
 
 	// Attempt to parse object report format
@@ -43,7 +44,7 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 			return err
 		}
 	}
-	if StringLen(body) == 0 && p.Timestamp == 0 {
+	if utils.StringLen(body) == 0 && p.Timestamp == 0 {
 		return errors.New("invalid timestamp format")
 	}
 
