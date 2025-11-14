@@ -52,6 +52,11 @@ func QConstruct(p *parser.Parsed, config *QConfig) (*QResult, error) {
 	// Apply initial processing for all packets
 	result.applyInitialProcessing(p, config)
 
+	// Check loop before all qConstruct
+	if result.checkForLoopsBeforeProcessing(config) {
+		return result, nil
+	}
+
 	// Process based on connection type
 	switch config.ConnectionType {
 	case ConnectionDirectUDP:
@@ -91,6 +96,41 @@ func (r *QResult) applyInitialProcessing(p *parser.Parsed, config *QConfig) {
 			r.Path = append(r.Path, "TCPXX*")
 		}
 	}
+}
+
+// checkForLoopsBeforeProcessing checks loop before all qConstruct
+func (r *QResult) checkForLoopsBeforeProcessing(config *QConfig) bool {
+	// Check for qAZ construct
+	if r.hasSpecificQConstruct("qAZ") {
+		r.ShouldDrop = true
+		r.DropReason = "qAZ construct - server-client command packet"
+		return true
+	}
+
+	// Check for qAC construct with invalid path
+	if r.hasSpecificQConstruct("qAC") && !r.hasTCPIPPath() {
+		r.ShouldDrop = true
+		r.DropReason = "qAC construct without TCPIP* path"
+		return true
+	}
+
+	// Check for server login in q construct (loop detection)
+	if r.containsServerLogin(config.ServerLogin) {
+		r.ShouldDrop = true
+		r.IsLoop = true
+		r.DropReason = "Loop detected - server login found in q construct"
+		return true
+	}
+
+	// Check for duplicate callsign-SSID in q construct
+	if r.hasDuplicateCallsigns() {
+		r.ShouldDrop = true
+		r.IsLoop = true
+		r.DropReason = "Loop detected - duplicate callsign-SSID in q construct"
+		return true
+	}
+
+	return false
 }
 
 // processDirectUDP processes direct UDP connection
@@ -223,36 +263,6 @@ func (r *QResult) processOutboundServer(config *QConfig) {
 // applyFinalProcessing final processed qConstruct
 func (r *QResult) applyFinalProcessing(config *QConfig) {
 	if r.ShouldDrop {
-		return
-	}
-
-	// Check for qAZ construct
-	if r.hasSpecificQConstruct("qAZ") {
-		r.ShouldDrop = true
-		r.DropReason = "qAZ construct - server-client command packet"
-		return
-	}
-
-	// Check for qAC construct with invalid path
-	if r.hasSpecificQConstruct("qAC") && !r.hasTCPIPPath() {
-		r.ShouldDrop = true
-		r.DropReason = "qAC construct without TCPIP* path"
-		return
-	}
-
-	// Check for server login in q construct (loop detection)
-	if r.containsServerLogin(config.ServerLogin) {
-		r.ShouldDrop = true
-		r.IsLoop = true
-		r.DropReason = "Loop detected - server login found in q construct"
-		return
-	}
-
-	// Check for duplicate callsign-SSID in q construct
-	if r.hasDuplicateCallsigns() {
-		r.ShouldDrop = true
-		r.IsLoop = true
-		r.DropReason = "Loop detected - duplicate callsign-SSID in q construct"
 		return
 	}
 
