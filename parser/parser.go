@@ -54,11 +54,11 @@ func Parse(packet string) (Parsed, error) {
 // parseTimeStamp parses timestamp from APRS packet
 func (p *Parsed) parseTimeStamp(packetType string, body string) (string, error) {
 	// Check body length
-	if len(body) < 7 {
+	if utils.StringLen(body) < 7 {
 		return body, errors.New("invalid timestamp format")
 	}
 	// Match
-	matches := aprsutils.CompiledRegexps.Get(`^((\d{6})(.))$`).FindStringSubmatch(body[0:7])
+	matches := aprsutils.CompiledRegexps.Get(`^((\d{6})(.))$`).FindStringSubmatch(string([]rune(body)[0:7]))
 	if matches == nil || len(matches) < 4 {
 		return body, nil
 	}

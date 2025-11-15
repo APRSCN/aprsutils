@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/APRSCN/aprsutils"
+	"github.com/APRSCN/aprsutils/utils"
 )
 
 // parseMessage parses message from APRS packet
@@ -109,9 +110,9 @@ func (p *Parsed) parseMessage(body string) string {
 				ackMsgNo = matches6[2]
 			}
 
-			removeLen := 4 + len(ackMsgNo) // {MM} + AA
-			if len(body) >= removeLen {
-				p.MessageText = strings.Trim(body[:len(body)-removeLen], " ")
+			removeLen := 4 + utils.StringLen(ackMsgNo) // {MM} + AA
+			if utils.StringLen(body) >= removeLen {
+				p.MessageText = strings.Trim(string([]rune(body)[:utils.StringLen(body)-removeLen]), " ")
 			}
 			p.MsgNo = msgNo
 			if ackMsgNo != "" {
@@ -126,9 +127,9 @@ func (p *Parsed) parseMessage(body string) string {
 		matches7 := re7.FindStringSubmatch(body)
 		if matches7 != nil && len(matches7) >= 2 {
 			msgNo := matches7[1]
-			removeLen := 1 + len(msgNo) // { + msgNo
-			if len(body) >= removeLen {
-				p.MessageText = strings.Trim(body[:len(body)-removeLen], " ")
+			removeLen := 1 + utils.StringLen(msgNo) // { + msgNo
+			if utils.StringLen(body) >= removeLen {
+				p.MessageText = strings.Trim(string([]rune(body)[:utils.StringLen(body)-removeLen]), " ")
 			}
 			p.MsgNo = msgNo
 			break

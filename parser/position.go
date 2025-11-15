@@ -92,7 +92,7 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 func (p *Parsed) parseCompressed(body string) (string, error) {
 	// Attempt to parse as compressed position report
 	// Check length
-	if len(body) < 13 {
+	if utils.StringLen(body) < 13 {
 		return body, errors.New("invalid compressed format")
 	}
 
@@ -117,9 +117,12 @@ func (p *Parsed) parseCompressed(body string) (string, error) {
 	latitude := 90 - (float64(base91Lat) / 380926)
 	longitude := -180 + (float64(base91Lon) / 190463)
 
-	c1 := int(compressed[10]) - 33
-	s1 := int(compressed[11]) - 33
-	ctype := int(compressed[12]) - 33
+	c1Int, _ := strconv.Atoi(string([]rune(compressed)[10]))
+	c1 := c1Int - 33
+	s1Int, _ := strconv.Atoi(string([]rune(compressed)[11]))
+	s1 := s1Int - 33
+	ctypeInt, _ := strconv.Atoi(string([]rune(compressed)[12]))
+	ctype := ctypeInt - 33
 
 	if c1 == -1 {
 		if ctype&0x20 == 0x20 {
@@ -220,10 +223,10 @@ func (p *Parsed) parseNormal(body string) (string, error) {
 	}
 	longitude := float64(lonDegInt) + (lonMinFloat / 60.0)
 
-	if strings.Contains("Ss", string(latDir[0])) {
+	if strings.Contains("Ss", string([]rune(latDir)[0])) {
 		latitude *= -1
 	}
-	if strings.Contains("Ww", string(lonDir[0])) {
+	if strings.Contains("Ww", string([]rune(lonDir)[0])) {
 		longitude *= -1
 	}
 

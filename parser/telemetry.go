@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/APRSCN/aprsutils"
+	"github.com/APRSCN/aprsutils/utils"
 )
 
 // TelemetryData is the struct for telemetry data
@@ -26,8 +27,8 @@ func (p *Parsed) parseCommentTelemetry(text string) string {
 		text += post
 
 		temp := make([]int, 7)
-		for i := 0; i < 7 && i*2+2 <= len(telemetry); i++ {
-			temp[i], _ = aprsutils.ToDecimal(telemetry[i*2 : i*2+2])
+		for i := 0; i < 7 && i*2+2 <= utils.StringLen(telemetry); i++ {
+			temp[i], _ = aprsutils.ToDecimal(string([]rune(telemetry)[i*2 : i*2+2]))
 		}
 
 		telemetryData := TelemetryData{
@@ -73,7 +74,7 @@ func (p *Parsed) parseTelemetryConfig(body string) (string, error) {
 			}
 
 			for _, val := range vals {
-				if len(val) > 20 {
+				if utils.StringLen(val) > 20 {
 					return body, errors.New("incorrect format of " + form + " (name too long?)")
 				}
 			}

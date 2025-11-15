@@ -19,8 +19,8 @@ func (p *Parsed) parseComment(body string) string {
 
 	body = p.parseDAO(body)
 
-	if len(body) > 0 && body[0] == '/' {
-		body = body[1:]
+	if utils.StringLen(body) > 0 && string([]rune(body)[0]) == "/" {
+		body = string([]rune(body)[1:])
 	}
 
 	p.Comment = strings.Trim(body, " ")
@@ -38,7 +38,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 
 	if matches != nil && len(matches) >= 3 {
 		cse, spd := matches[1], matches[2]
-		body = body[7:]
+		body = string([]rune(body)[7:])
 
 		if utils.IsDigit(cse) && cse != "000" {
 			cseInt, _ := strconv.Atoi(cse)
@@ -67,7 +67,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 			}
 
 			brg, nrq := matches2[1], matches2[2]
-			body = body[8:]
+			body = string([]rune(body)[8:])
 
 			if utils.IsDigit(brg) {
 				brgInt, _ := strconv.Atoi(brg)
@@ -88,14 +88,15 @@ func (p *Parsed) parseDataExtensions(body string) string {
 
 		if matches3 != nil && len(matches3) >= 4 {
 			ext, phg, phgr := matches3[1], matches3[2], matches3[3]
-			body = body[len(ext):]
+			body = string([]rune(body)[utils.StringLen(ext):])
 
-			power, _ := strconv.Atoi(string(phg[0]))
+			power, _ := strconv.Atoi(string([]rune(phg)[0]))
 			phgPower := math.Pow(float64(power), 2)
 
-			height := (10 * math.Pow(2, float64(int(phg[1])-0x30))) * 0.3048
+			heightPhg, _ := strconv.ParseFloat(string([]rune(phg)[1]), 64)
+			height := (10 * math.Pow(2, heightPhg-0x30)) * 0.3048
 
-			gain, _ := strconv.Atoi(string(phg[2]))
+			gain, _ := strconv.Atoi(string([]rune(phg)[2]))
 			phgGain := math.Pow(10, float64(gain)/10.0)
 
 			p.PHG = phg
@@ -103,7 +104,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 			p.PHGHeight = height
 			p.PHGGain = phgGain
 
-			phgDir, _ := strconv.Atoi(string(phg[3]))
+			phgDir, _ := strconv.Atoi(string([]rune(phg)[3]))
 			var direction string
 			if phgDir == 0 {
 				direction = "omni"
@@ -120,8 +121,8 @@ func (p *Parsed) parseDataExtensions(body string) string {
 			p.PHGRange = phgRange
 
 			if phgr != "" {
-				p.PHG = phg + string(phgr[0])
-				rate, _ := strconv.ParseInt(string(phgr[0]), 16, 64)
+				p.PHG = phg + string([]rune(phgr)[0])
+				rate, _ := strconv.ParseInt(string([]rune(phgr)[0]), 16, 64)
 				p.PHGRate = int(rate)
 			}
 		} else {
@@ -131,7 +132,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 
 			if matches4 != nil && len(matches4) >= 2 {
 				rng := matches4[1]
-				body = body[7:]
+				body = string([]rune(body)[7:])
 				rngInt, _ := strconv.Atoi(rng)
 				p.RNG = float64(rngInt) * 1.609344
 			}
@@ -170,13 +171,13 @@ func (p *Parsed) parseDAO(body string) string {
 		latOffset, lonOffset := 0.0, 0.0
 
 		if daobyte == "W" && utils.IsDigit(dao) {
-			dao0, _ := strconv.Atoi(string(dao[0]))
-			dao1, _ := strconv.Atoi(string(dao[1]))
+			dao0, _ := strconv.Atoi(string([]rune(dao)[0]))
+			dao1, _ := strconv.Atoi(string([]rune(dao)[1]))
 			latOffset = float64(dao0) * 0.001 / 60
 			lonOffset = float64(dao1) * 0.001 / 60
 		} else if daobyte == "w" && !strings.Contains(dao, " ") {
-			latBase91, _ := aprsutils.ToDecimal(string(dao[0]))
-			lonBase91, _ := aprsutils.ToDecimal(string(dao[1]))
+			latBase91, _ := aprsutils.ToDecimal(string([]rune(dao)[0]))
+			lonBase91, _ := aprsutils.ToDecimal(string([]rune(dao)[1]))
 			latOffset = (float64(latBase91) / 91.0) * 0.01 / 60
 			lonOffset = (float64(lonBase91) / 91.0) * 0.01 / 60
 		}

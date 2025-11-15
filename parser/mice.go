@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/APRSCN/aprsutils"
+	"github.com/APRSCN/aprsutils/utils"
 )
 
 var MtypeTableStd = map[string]string{
@@ -38,10 +39,10 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	parts := strings.Split(dstCall, "-")
 	dstCall = parts[0]
 
-	if len(dstCall) != 6 {
+	if utils.StringLen(dstCall) != 6 {
 		return "", errors.New("dstCall has to be 6 characters")
 	}
-	if len(body) < 8 {
+	if utils.StringLen(body) < 8 {
 		return "", errors.New("packet data field is too short")
 	}
 
@@ -55,7 +56,7 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 		return "", errors.New("invalid data format")
 	}
 
-	p.Symbol = []string{string(body[6]), string(body[7])}
+	p.Symbol = []string{string([]rune(body)[6]), string([]rune(body)[7])}
 
 	// Parse latitude
 	// The routine translates each character into a lat digit as described in
@@ -81,7 +82,7 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 		return "", errors.New("invalid latitude ambiguity")
 	}
 
-	posAmbiguity := len(matches[1])
+	posAmbiguity := utils.StringLen(matches[1])
 	p.PosAmbiguity = posAmbiguity
 
 	tempDstCallRunes := []rune(tempDstCall)
@@ -95,24 +96,24 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	tempDstCall = string(tempDstCallRunes)
 
 	// Adjust the coordinates be in center of ambiguity box
-	latMinutesStr := strings.ReplaceAll(tempDstCall[2:4]+"."+tempDstCall[4:6], " ", "0")
+	latMinutesStr := strings.ReplaceAll(string([]rune(tempDstCall)[2:4])+"."+string([]rune(tempDstCall)[4:6]), " ", "0")
 	latMinutes, err := strconv.ParseFloat(latMinutesStr, 64)
 	if err != nil {
 		return "", errors.New("invalid latitude minutes format")
 	}
 
-	latDegrees, _ := strconv.Atoi(tempDstCall[0:2])
+	latDegrees, _ := strconv.Atoi(string([]rune(tempDstCall)[0:2]))
 	latitude := float64(latDegrees) + (latMinutes / 60.0)
 
 	// Determine the sign N/S
-	if dstCall[3] <= 0x4c {
+	if []rune(dstCall)[3] <= 0x4c {
 		latitude = -latitude
 	}
 
 	p.Lat = latitude
 
 	// Parse message bits
-	mBits := aprsutils.CompiledRegexps.Get("[0-9L]").ReplaceAllString(dstCall[0:3], "0")
+	mBits := aprsutils.CompiledRegexps.Get("[0-9L]").ReplaceAllString(string([]rune(dstCall)[0:3]), "0")
 	mBits = aprsutils.CompiledRegexps.Get("[P-Z]").ReplaceAllString(mBits, "1")
 	mBits = aprsutils.CompiledRegexps.Get("[A-K]").ReplaceAllString(mBits, "2")
 
@@ -127,8 +128,9 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	}
 
 	// Parse longitude
-	longitude := float64(body[0]) - 28
-	if dstCall[4] >= 0x50 {
+	lonF64, _ := strconv.ParseFloat(string([]rune(body)[0]), 64)
+	longitude := lonF64 - 28
+	if []rune(dstCall)[4] >= 0x50 {
 		longitude += 100
 	}
 	if longitude >= 180 && longitude <= 189 {
@@ -138,13 +140,15 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	}
 
 	// Long minutes
-	lngMinutes := float64(body[1]) - 28.0
+	lngF641, _ := strconv.ParseFloat(string([]rune(body)[1]), 64)
+	lngMinutes := lngF641 - 28.0
 	if lngMinutes >= 60 {
 		lngMinutes -= 60
 	}
 
 	// + (long hundredths of minutes)
-	lngMinutes += (float64(body[2]) - 28.0) / 100.0
+	lngF642, _ := strconv.ParseFloat(string([]rune(body)[2]), 64)
+	lngMinutes += (lngF642 - 28.0) / 100.0
 
 	// Apply position ambiguity
 	// Routines adjust longitude to center of the ambiguity box
@@ -163,18 +167,21 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	longitude += lngMinutes / 60.0
 
 	// Apply E/W sign
-	if dstCall[5] >= 0x50 {
+	if []rune(dstCall)[5] >= 0x50 {
 		longitude = -longitude
 	}
 
 	p.Lon = longitude
 
 	// Parse speed and course
-	speed := (float64(body[3]) - 28) * 10
-	course := float64(body[4]) - 28
+	speedF64, _ := strconv.ParseFloat(string([]rune(body)[3]), 64)
+	speed := (speedF64 - 28) * 10
+	courseF644, _ := strconv.ParseFloat(string([]rune(body)[4]), 64)
+	course := courseF644 - 28
 	quotient := int(course / 10.0)
 	course -= float64(quotient * 10)
-	course = course*100 + float64(body[5]) - 28
+	courseF645, _ := strconv.ParseFloat(string([]rune(body)[5]), 64)
+	course = course*100 + courseF645 - 28
 	speed += float64(quotient)
 
 	if speed >= 800 {
@@ -188,17 +195,17 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	p.Speed = speed
 	p.Course = course
 
-	if len(body) > 8 {
-		body = body[8:]
+	if utils.StringLen(body) > 8 {
+		body = string([]rune(body)[8:])
 
 		// Check for optional 2 or 5 channel telemetry
 		re4 := aprsutils.CompiledRegexps.Get(`^('[0-9a-f]{10}|` + "`" + `[0-9a-f]{4})(.*)$`)
 		matches := re4.FindStringSubmatch(body)
 		if matches != nil && len(matches) >= 3 {
 			hexData, remainingBody := matches[1], matches[2]
-			hexData = hexData[1:]
+			hexData = string([]rune(hexData)[1:])
 
-			channels := len(hexData) / 2
+			channels := utils.StringLen(hexData) / 2
 
 			hexInt, err := strconv.ParseInt(hexData, 16, 64)
 			if err != nil {

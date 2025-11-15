@@ -2,6 +2,8 @@ package aprsutils
 
 import (
 	"strings"
+
+	"github.com/APRSCN/aprsutils/utils"
 )
 
 const key = 0x73e2 // This is the key for the data
@@ -13,7 +15,7 @@ func Passcode(callsign string) int {
 	rootCall := parts[0]
 
 	// Transfer to upper case
-	if len(rootCall) > 8 {
+	if utils.StringLen(rootCall) > 8 {
 		rootCall = rootCall[:8]
 	}
 	rootCall = strings.ToUpper(rootCall)
