@@ -9,7 +9,7 @@ import (
 )
 
 // parseHeader parses header of APRS packet
-func (p *Parsed) parseHeader(head string) error {
+func (p *Parsed) parseHeader(head string, conf *config) error {
 	// Split fromCall and path
 	fromCall, path, ok := utils.SplitOnce(head, ">")
 	if !ok {
@@ -37,9 +37,11 @@ func (p *Parsed) parseHeader(head string) error {
 	paths = paths[1:]
 
 	// Validate callsign
-	ok = aprsutils.ValidateCallsign(toCall)
-	if !ok {
-		return errors.New("invalid toCallsign in header")
+	if !conf.disableToCallsignValidate {
+		ok = aprsutils.ValidateCallsign(toCall)
+		if !ok {
+			return errors.New("invalid toCallsign in header")
+		}
 	}
 
 	// Remove space path

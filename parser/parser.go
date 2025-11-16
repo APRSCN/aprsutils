@@ -10,7 +10,32 @@ import (
 	"github.com/APRSCN/aprsutils/utils"
 )
 
-func Parse(packet string) (Parsed, error) {
+// config provides parser config options
+type config struct {
+	disableToCallsignValidate bool
+}
+
+// Option provides a basic option type
+type Option func(*config)
+
+// WithDisableToCallsignValidate disables to callsign validate
+func WithDisableToCallsignValidate() Option {
+	return func(p *config) {
+		p.disableToCallsignValidate = true
+	}
+}
+
+func Parse(packet string, options ...Option) (Parsed, error) {
+	// Create config
+	conf := &config{
+		disableToCallsignValidate: false,
+	}
+
+	// Apply options
+	for _, opt := range options {
+		opt(conf)
+	}
+
 	// Create result
 	parsed := &Parsed{}
 
@@ -37,7 +62,7 @@ func Parse(packet string) (Parsed, error) {
 	}
 
 	// Parse head
-	err := parsed.parseHeader(head)
+	err := parsed.parseHeader(head, conf)
 	if err != nil {
 		return *parsed, err
 	}
