@@ -292,8 +292,7 @@ func (c *Client) login() error {
 	}
 
 	// Update statistics
-	c.updateSentStats(sent)
-	c.stats.PacketsSent += 1
+	go c.updateSentBytesStats(sent)
 
 	// Check passcode
 	if strconv.Itoa(aprsutils.Passcode(c.callsign)) == c.passcode {
@@ -309,19 +308,37 @@ func (c *Client) login() error {
 	return nil
 }
 
-// updateSentStats updates sent bytes statistics
-func (c *Client) updateSentStats(bytes int) {
+// updateSentBytesStats updates sent bytes statistics
+func (c *Client) updateSentBytesStats(bytes int) {
+	c.statsMu.Lock()
+	defer c.statsMu.Unlock()
 	c.stats.TotalSentBytes += uint64(bytes)
 	c.currentSent += uint64(bytes)
 	c.lastActivity = time.Now()
 }
 
-// updateRecvStats updates received bytes statistics
-func (c *Client) updateRecvStats(bytes int) {
+// updateSentPacketStats updates sent packets statistics
+func (c *Client) updateSentPacketStats(packet int) {
+	c.statsMu.Lock()
+	defer c.statsMu.Unlock()
+	c.stats.PacketsSent += uint64(packet)
+}
+
+// updateRecvBytesStats updates received bytes statistics
+func (c *Client) updateRecvBytesStats(bytes int) {
+	c.statsMu.Lock()
+	defer c.statsMu.Unlock()
 	c.stats.TotalRecvBytes += uint64(bytes)
 	c.currentRecv += uint64(bytes)
 	c.stats.PacketsReceived += 1
 	c.lastActivity = time.Now()
+}
+
+// updateRecvPacketStats updates received packets statistics
+func (c *Client) updateRecvPacketStats(packet int) {
+	c.statsMu.Lock()
+	defer c.statsMu.Unlock()
+	c.stats.PacketsReceived += uint64(packet)
 }
 
 // updateStats periodically updates the current rate statistics
@@ -353,6 +370,12 @@ func (c *Client) updateStats() {
 			c.statsMu.Unlock()
 		}
 	}
+}
+
+// internalHandler handles packet first to do statistic
+func (c *Client) internalHandler(packet string) {
+	go c.updateRecvPacketStats(1)
+	c.handler(packet)
 }
 
 // receivePackets receives packet from the APRS server
@@ -391,7 +414,7 @@ root:
 			}
 
 			// Update received bytes statistics
-			c.updateRecvStats(len(line))
+			go c.updateRecvBytesStats(len(line))
 
 			// Trim space
 			line = strings.TrimSpace(line)
@@ -410,7 +433,7 @@ root:
 			}
 
 			// Handle packet
-			c.handler(line)
+			c.internalHandler(line)
 		}
 	}
 
@@ -487,8 +510,8 @@ func (c *Client) SendPacket(packet string) error {
 	}
 
 	// Update statistics
-	c.updateSentStats(sent)
-	c.stats.PacketsSent += 1
+	go c.updateSentBytesStats(sent)
+	go c.updateSentPacketStats(1)
 
 	c.logger.Debug(nil, "Sent packet: ", packet)
 	return nil
