@@ -59,7 +59,8 @@ type Client struct {
 	software   string
 	version    string
 
-	conn net.Conn
+	conn    net.Conn
+	bufSize int
 
 	mu     sync.Mutex
 	done   chan struct{}
@@ -184,6 +185,13 @@ func WithRetryTimes(retryTimes int) Option {
 	}
 }
 
+// WithBufSize sets a custom buf size for reader
+func WithBufSize(bufSize int) Option {
+	return func(c *Client) {
+		c.bufSize = bufSize
+	}
+}
+
 // NewClient creates a new APRS client
 func NewClient(
 	callsign string, passcode string,
@@ -218,6 +226,9 @@ func NewClient(
 
 	// Set default retry times
 	c.retryTimes = 5
+
+	// Set default buf size
+	c.bufSize = 1024
 
 	// Apply options
 	for _, option := range options {
@@ -347,7 +358,7 @@ func (c *Client) updateStats() {
 // receivePackets receives packet from the APRS server
 func (c *Client) receivePackets() {
 	// Create a reader
-	reader := bufio.NewReader(c.conn)
+	reader := bufio.NewReaderSize(c.conn, c.bufSize)
 
 	serverInfoCount := 0
 root:
