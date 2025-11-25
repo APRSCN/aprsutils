@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ghinknet/regexp"
+
 	"github.com/APRSCN/aprsutils"
 	"github.com/APRSCN/aprsutils/utils"
 )
@@ -46,12 +48,12 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 		return "", errors.New("packet data field is too short")
 	}
 
-	re1 := aprsutils.CompiledRegexps.Get(`^[0-9A-Z]{3}[0-9L-Z]{3}$`)
+	re1 := regexp.MustCompile(`^[0-9A-Z]{3}[0-9L-Z]{3}$`)
 	if !re1.MatchString(dstCall) {
 		return "", errors.New("invalid dstCall")
 	}
 
-	re2 := aprsutils.CompiledRegexps.Get(`^[&-\x7f][&-a][\x1c-\x7f]{2}[\x1c-\x7d][\x1c-\x7f][\x21-\x7e][/\\0-9A-Z]`)
+	re2 := regexp.MustCompile(`^[&-\x7f][&-a][\x1c-\x7f]{2}[\x1c-\x7d][\x1c-\x7f][\x21-\x7e][/\\0-9A-Z]`)
 	if !re2.MatchString(body) {
 		return "", errors.New("invalid data format")
 	}
@@ -76,7 +78,7 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	}
 
 	// Determine position ambiguity
-	re3 := aprsutils.CompiledRegexps.Get(`^\d+( *)$`)
+	re3 := regexp.MustCompile(`^\d+( *)$`)
 	matches := re3.FindStringSubmatch(tempDstCall)
 	if matches == nil {
 		return "", errors.New("invalid latitude ambiguity")
@@ -113,9 +115,9 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	p.Lat = latitude
 
 	// Parse message bits
-	mBits := aprsutils.CompiledRegexps.Get("[0-9L]").ReplaceAllString(string([]rune(dstCall)[0:3]), "0")
-	mBits = aprsutils.CompiledRegexps.Get("[P-Z]").ReplaceAllString(mBits, "1")
-	mBits = aprsutils.CompiledRegexps.Get("[A-K]").ReplaceAllString(mBits, "2")
+	mBits := regexp.MustCompile("[0-9L]").ReplaceAllString(string([]rune(dstCall)[0:3]), "0")
+	mBits = regexp.MustCompile("[P-Z]").ReplaceAllString(mBits, "1")
+	mBits = regexp.MustCompile("[A-K]").ReplaceAllString(mBits, "2")
 
 	p.MBits = mBits
 
@@ -199,7 +201,7 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 		body = string([]rune(body)[8:])
 
 		// Check for optional 2 or 5 channel telemetry
-		re4 := aprsutils.CompiledRegexps.Get(`^('[0-9a-f]{10}|` + "`" + `[0-9a-f]{4})(.*)$`)
+		re4 := regexp.MustCompile(`^('[0-9a-f]{10}|` + "`" + `[0-9a-f]{4})(.*)$`)
 		matches := re4.FindStringSubmatch(body)
 		if matches != nil && len(matches) >= 3 {
 			hexData, remainingBody := matches[1], matches[2]
@@ -221,7 +223,7 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 			body = remainingBody
 		}
 
-		re5 := aprsutils.CompiledRegexps.Get(`^(.*)([!-{]{3})}(.*)$`)
+		re5 := regexp.MustCompile(`^(.*)([!-{]{3})}(.*)$`)
 		matches = re5.FindStringSubmatch(body)
 		if matches != nil && len(matches) >= 4 {
 			bodyPart, altitude, extra := matches[1], matches[2], matches[3]

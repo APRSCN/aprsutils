@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ghinknet/regexp"
+
 	"github.com/APRSCN/aprsutils"
 	"github.com/APRSCN/aprsutils/utils"
 )
@@ -19,7 +21,7 @@ type TelemetryData struct {
 // parseCommentTelemetry parses comment telemetry from APRS packet
 func (p *Parsed) parseCommentTelemetry(text string) string {
 	pattern := `^(.*?)\|([!-{]{4,14})\|(.*)$`
-	re := aprsutils.CompiledRegexps.Get(pattern)
+	re := regexp.MustCompile(pattern)
 	matches := re.FindStringSubmatch(text)
 
 	if matches != nil && len(matches) >= 4 && len(matches[2])%2 == 0 {
@@ -58,7 +60,7 @@ func (p *Parsed) parseCommentTelemetry(text string) string {
 // parseTelemetryConfig parses telemetry config from APRS packet
 func (p *Parsed) parseTelemetryConfig(body string) (string, error) {
 	pattern := `^(PARM|UNIT|EQNS|BITS)\.(.*)$`
-	re := aprsutils.CompiledRegexps.Get(pattern)
+	re := regexp.MustCompile(pattern)
 	matches := re.FindStringSubmatch(body)
 
 	if matches != nil && len(matches) >= 3 {
@@ -111,7 +113,7 @@ func (p *Parsed) parseTelemetryConfig(body string) (string, error) {
 					continue
 				}
 
-				if !aprsutils.CompiledRegexps.Get(`^[-]?\d*\.?\d+$`).MatchString(val) {
+				if !regexp.MustCompile(`^[-]?\d*\.?\d+$`).MatchString(val) {
 					return body, errors.New("value at " + strconv.Itoa(idx+1) + " is not a number in " + form)
 				}
 
@@ -136,7 +138,7 @@ func (p *Parsed) parseTelemetryConfig(body string) (string, error) {
 
 		case "BITS":
 			pattern := `^([01]{8}),(.{0,23})$`
-			re := aprsutils.CompiledRegexps.Get(pattern)
+			re := regexp.MustCompile(pattern)
 			matches := re.FindStringSubmatch(strings.TrimRight(body, " "))
 			if matches == nil || len(matches) < 3 {
 				return body, errors.New("incorrect format of " + form + " (title too long?)")

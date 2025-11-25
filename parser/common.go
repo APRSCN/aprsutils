@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/ghinknet/regexp"
+
 	"github.com/APRSCN/aprsutils"
 	"github.com/APRSCN/aprsutils/utils"
 )
@@ -18,7 +20,7 @@ func (p *Parsed) parseHeader(head string, conf *config) error {
 
 	// Check fromCall
 	if !(1 <= utils.StringLen(fromCall) && utils.StringLen(fromCall) <= 9) ||
-		!aprsutils.CompiledRegexps.Get(`(?i)^[a-z0-9]{0,9}(-[a-z0-9]{1,8})?$`).MatchString(fromCall) {
+		!regexp.MustCompile(`(?i)^[a-z0-9]{0,9}(-[a-z0-9]{1,8})?$`).MatchString(fromCall) {
 		return errors.New("fromCallsign is invalid")
 	}
 
@@ -56,7 +58,7 @@ func (p *Parsed) parseHeader(head string, conf *config) error {
 
 	// Check callsign in paths
 	for _, pa := range paths {
-		if !aprsutils.CompiledRegexps.Get(`(?i)^[A-Z0-9\-]{1,9}\*?$`).MatchString(pa) {
+		if !regexp.MustCompile(`(?i)^[A-Z0-9\-]{1,9}\*?$`).MatchString(pa) {
 			return errors.New("invalid callsign in path")
 		}
 	}

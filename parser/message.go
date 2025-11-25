@@ -3,14 +3,15 @@ package parser
 import (
 	"strings"
 
-	"github.com/APRSCN/aprsutils"
+	"github.com/ghinknet/regexp"
+
 	"github.com/APRSCN/aprsutils/utils"
 )
 
 // parseMessage parses message from APRS packet
 func (p *Parsed) parseMessage(body string) string {
 	for {
-		re1 := aprsutils.CompiledRegexps.Get(`(?i)^BLN([0-9])([a-z0-9_ \-]{5}):(.{0,67})`)
+		re1 := regexp.MustCompile(`(?i)^BLN([0-9])([a-z0-9_ \-]{5}):(.{0,67})`)
 		matches1 := re1.FindStringSubmatch(body)
 		if matches1 != nil && len(matches1) >= 4 {
 			bid, identifier, text := matches1[1], matches1[2], matches1[3]
@@ -28,7 +29,7 @@ func (p *Parsed) parseMessage(body string) string {
 			break
 		}
 
-		re2 := aprsutils.CompiledRegexps.Get(`^BLN([A-Z])([a-zA-Z0-9_ \-]{5}):(.{0,67})`)
+		re2 := regexp.MustCompile(`^BLN([A-Z])([a-zA-Z0-9_ \-]{5}):(.{0,67})`)
 		matches2 := re2.FindStringSubmatch(body)
 		if matches2 != nil && len(matches2) >= 4 {
 			aid, identifier, text := matches2[1], matches2[2], matches2[3]
@@ -41,7 +42,7 @@ func (p *Parsed) parseMessage(body string) string {
 			break
 		}
 
-		re3 := aprsutils.CompiledRegexps.Get(`^([a-zA-Z0-9_ \-]{9}):(.*)$`)
+		re3 := regexp.MustCompile(`^([a-zA-Z0-9_ \-]{9}):(.*)$`)
 		matches3 := re3.FindStringSubmatch(body)
 		if matches3 == nil || len(matches3) < 3 {
 			break
@@ -73,7 +74,7 @@ func (p *Parsed) parseMessage(body string) string {
 		// ---------------------------
 		// NEW REPLAY-ACK
 		// Format: :AAAABBBBC:ackMM}AA
-		re4 := aprsutils.CompiledRegexps.Get(`^(ack|rej)([A-Za-z0-9]{2})}([A-Za-z0-9]{2})?$`)
+		re4 := regexp.MustCompile(`^(ack|rej)([A-Za-z0-9]{2})}([A-Za-z0-9]{2})?$`)
 		matches4 := re4.FindStringSubmatch(body)
 		if matches4 != nil && len(matches4) >= 3 {
 			p.Response = matches4[1]
@@ -86,7 +87,7 @@ func (p *Parsed) parseMessage(body string) string {
 
 		// ack/rej standard format as per aprs101.pdf chapter 14
 		// Format: :AAAABBBBC:ack12345
-		re5 := aprsutils.CompiledRegexps.Get(`^(ack|rej)([A-Za-z0-9]{1,5})$`)
+		re5 := regexp.MustCompile(`^(ack|rej)([A-Za-z0-9]{1,5})$`)
 		matches5 := re5.FindStringSubmatch(body)
 		if matches5 != nil && len(matches5) >= 3 {
 			p.Response = matches5[1]
@@ -101,7 +102,7 @@ func (p *Parsed) parseMessage(body string) string {
 		// Check for ACKs
 		// New message format: http://www.aprs.org/aprs11/replyacks.txt
 		// Format: :AAAABBBBC:text.....{MM}AA
-		re6 := aprsutils.CompiledRegexps.Get(`{([A-Za-z0-9]{2})}([A-Za-z0-9]{2})?$`)
+		re6 := regexp.MustCompile(`{([A-Za-z0-9]{2})}([A-Za-z0-9]{2})?$`)
 		matches6 := re6.FindStringSubmatch(body)
 		if matches6 != nil && len(matches6) >= 2 {
 			msgNo := matches6[1]
@@ -123,7 +124,7 @@ func (p *Parsed) parseMessage(body string) string {
 
 		// Old message format - see aprs101.pdf.
 		// Search for: msgNo present
-		re7 := aprsutils.CompiledRegexps.Get(`{([A-Za-z0-9]{1,5})$`)
+		re7 := regexp.MustCompile(`{([A-Za-z0-9]{1,5})$`)
 		matches7 := re7.FindStringSubmatch(body)
 		if matches7 != nil && len(matches7) >= 2 {
 			msgNo := matches7[1]

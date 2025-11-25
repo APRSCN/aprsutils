@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ghinknet/regexp"
+
 	"github.com/APRSCN/aprsutils"
 	"github.com/APRSCN/aprsutils/utils"
 )
@@ -20,7 +22,7 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 
 	// Attempt to parse object report format
 	if packetType == ";" {
-		matches := aprsutils.CompiledRegexps.Get(`^([ -~]{9})(\*|_)`).FindStringSubmatch(body)
+		matches := regexp.MustCompile(`^([ -~]{9})(\*|_)`).FindStringSubmatch(body)
 		if matches != nil && len(matches) >= 3 {
 			name := matches[1]
 			flag := matches[2]
@@ -50,7 +52,7 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 
 	// Decode body
 	var err error
-	if aprsutils.CompiledRegexps.Get(`^[0-9\s]{4}\.[0-9\s]{2}[NS].[0-9\s]{5}\.[0-9\s]{2}[EW]`).MatchString(body) {
+	if regexp.MustCompile(`^[0-9\s]{4}\.[0-9\s]{2}[NS].[0-9\s]{5}\.[0-9\s]{2}[EW]`).MatchString(body) {
 		body, err = p.parseNormal(body)
 		if err != nil {
 			return err
@@ -161,7 +163,7 @@ func (p *Parsed) parseNormal(body string) (string, error) {
 	pattern := `^(\d{2})([0-9 ]{2}\.[0-9 ]{2})([NnSs])([\/\\0-9A-Z])` +
 		`(\d{3})([0-9 ]{2}\.[0-9 ]{2})([EeWw])([\x21-\x7e])(.*)$`
 
-	re := aprsutils.CompiledRegexps.Get(pattern)
+	re := regexp.MustCompile(pattern)
 	matches := re.FindStringSubmatch(body)
 
 	if matches == nil || len(matches) < 10 {

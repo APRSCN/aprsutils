@@ -6,7 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/APRSCN/aprsutils"
+	"github.com/ghinknet/regexp"
+
 	"github.com/APRSCN/aprsutils/utils"
 )
 
@@ -83,7 +84,7 @@ func (p *Parsed) parseTimeStamp(packetType string, body string) (string, error) 
 		return body, errors.New("invalid timestamp format")
 	}
 	// Match
-	matches := aprsutils.CompiledRegexps.Get(`^((\d{6})(.))$`).FindStringSubmatch(string([]rune(body)[0:7]))
+	matches := regexp.MustCompile(`^((\d{6})(.))$`).FindStringSubmatch(string([]rune(body)[0:7]))
 	if matches == nil || len(matches) < 4 {
 		return body, nil
 	}

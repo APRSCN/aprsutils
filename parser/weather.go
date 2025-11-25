@@ -5,7 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/APRSCN/aprsutils"
+	"github.com/ghinknet/regexp"
+
 	"github.com/APRSCN/aprsutils/utils"
 )
 
@@ -91,18 +92,18 @@ var valMap = map[string]func(string) float64{
 
 // parseWeatherData parses weather data from APRS packet
 func (p *Parsed) parseWeatherData(body string) string {
-	re1 := aprsutils.CompiledRegexps.Get(`^([0-9]{3})/([0-9]{3})`)
+	re1 := regexp.MustCompile(`^([0-9]{3})/([0-9]{3})`)
 	body = re1.ReplaceAllString(body, "c${1}s${2}")
 	body = strings.Replace(body, "s", "S", 1)
 
-	re2 := aprsutils.CompiledRegexps.Get(`^([cSgtrpPlLs#][0-9\-. ]{3}|h[0-9. ]{2}|b[0-9. ]{5})+`)
+	re2 := regexp.MustCompile(`^([cSgtrpPlLs#][0-9\-. ]{3}|h[0-9. ]{2}|b[0-9. ]{5})+`)
 	dataMatch := re2.FindString(body)
 
 	if dataMatch != "" {
 		data := dataMatch
 		body = string([]rune(body)[utils.StringLen(data):])
 
-		re3 := aprsutils.CompiledRegexps.Get(`([cSgtrpPlLs#]\d{3}|t-\d{2}|h\d{2}|b\d{5}|s\.\d{2}|s\d\.\d)`)
+		re3 := regexp.MustCompile(`([cSgtrpPlLs#]\d{3}|t-\d{2}|h\d{2}|b\d{5}|s\.\d{2}|s\d\.\d)`)
 		matches := re3.FindAllString(data, -1)
 
 		for _, match := range matches {
@@ -130,7 +131,7 @@ func (p *Parsed) parseWeatherData(body string) string {
 
 // parseWeather parses weather data from APRS packet
 func (p *Parsed) parseWeather(body string) (string, error) {
-	re := aprsutils.CompiledRegexps.Get(`^(\d{8})c[. \d]{3}s[. \d]{3}g[. \d]{3}t[. \d]{3}`)
+	re := regexp.MustCompile(`^(\d{8})c[. \d]{3}s[. \d]{3}g[. \d]{3}t[. \d]{3}`)
 	match := re.FindStringSubmatch(body)
 
 	if match == nil {
