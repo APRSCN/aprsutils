@@ -97,9 +97,8 @@ func (p *Parsed) parseWeatherData(body string) string {
 	body = strings.Replace(body, "s", "S", 1)
 
 	re2 := regexp.MustCompile(`^([cSgtrpPlLs#][0-9\-. ]{3}|h[0-9. ]{2}|b[0-9. ]{5})+`)
-	dataMatch := re2.FindString(body)
 
-	if dataMatch != "" {
+	if dataMatch := re2.FindString(body); dataMatch != "" {
 		data := dataMatch
 		body = string([]rune(body)[utils.StringLen(data):])
 

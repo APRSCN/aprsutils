@@ -1,2 +1,4 @@
 github.com/ghinknet/regexp v1.0.0 h1:d0Du+oCgONLUWZv0kJcg0V9ahViMFEQSh5z5p7Eo5Yw=
 github.com/ghinknet/regexp v1.0.0/go.mod h1:LbgzZRLl1HPcomJdfidnHw65ZZIu0E1PZIrtMGi50mU=
+github.com/ghinknet/toolbox v1.4.0 h1:nvv9/30m3oFWZCnqEQe3ZE8Xog8u/BErYkWryU07tHI=
+github.com/ghinknet/toolbox v1.4.0/go.mod h1:8JkXyeRPGaCSf/7nIZEKr8tJjzhzu/f/WpN7euSWQLI=

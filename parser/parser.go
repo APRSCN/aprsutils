@@ -38,7 +38,7 @@ func Parse(packet string, options ...Option) (Parsed, error) {
 	}
 
 	// Create result
-	parsed := &Parsed{}
+	parsed := new(Parsed)
 
 	// Save raw packet
 	parsed.Raw = packet
@@ -63,14 +63,12 @@ func Parse(packet string, options ...Option) (Parsed, error) {
 	}
 
 	// Parse head
-	err := parsed.parseHeader(head, conf)
-	if err != nil {
+	if err := parsed.parseHeader(head, conf); err != nil {
 		return *parsed, err
 	}
 
 	// Parse body
-	err = parsed.parseBody(body)
-	if err != nil {
+	if err := parsed.parseBody(body); err != nil {
 		return *parsed, err
 	}
 

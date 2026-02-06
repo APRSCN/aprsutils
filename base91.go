@@ -35,8 +35,7 @@ func ToDecimal(text string) (int, error) {
 func FromDecimal(number int, width ...int) (string, error) {
 	w := 1
 	if len(width) > 0 {
-		w = width[0]
-		if w < 0 {
+		if w = width[0]; w < 0 {
 			return "", errors.New("width must be non-negative")
 		}
 	}

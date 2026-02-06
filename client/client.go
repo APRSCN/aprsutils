@@ -391,8 +391,7 @@ root:
 			return
 		default:
 			// Set timeout
-			err := c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
-			if err != nil {
+			if err := c.conn.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
 				c.logger.Error(nil, "Error setting read deadline (timeout) ", err)
 				break root
 			}
@@ -459,8 +458,7 @@ root:
 		default:
 		}
 
-		err := c.Connect()
-		if err != nil {
+		if err := c.Connect(); err != nil {
 			c.logger.Error(nil, "Error connecting to server", err, " retry ", i)
 			time.Sleep(3 * time.Second)
 			continue
@@ -536,8 +534,7 @@ func (c *Client) heartBeat() {
 			c.mu.Unlock()
 
 			ping := fmt.Sprintf("# %s keepalive %d", c.software, time.Now().Unix())
-			err := c.SendPacket(ping)
-			if err != nil {
+			if err := c.SendPacket(ping); err != nil {
 				c.logger.Error(nil, "Heartbeat failed, connection may be closed")
 
 				// Close connection
@@ -571,8 +568,7 @@ func (c *Client) Close() {
 	close(c.done)
 
 	if c.conn != nil {
-		err := c.conn.Close()
-		if err != nil {
+		if err := c.conn.Close(); err != nil {
 			c.logger.Error(nil, "Error closing connection ", err)
 		} else {
 			c.logger.Info(nil, "client closed")

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/ghinknet/regexp"
+	"github.com/ghinknet/toolbox/expr"
 
 	"github.com/APRSCN/aprsutils/utils"
 )
@@ -17,10 +18,7 @@ func (p *Parsed) parseMessage(body string) string {
 			bid, identifier, text := matches1[1], matches1[2], matches1[3]
 			identifier = strings.TrimRight(identifier, " ")
 
-			mformat := "bulletin"
-			if identifier != "" {
-				mformat = "group-bulletin"
-			}
+			mformat := expr.Ternary(identifier != "", "group-bulletin", "bulletin")
 
 			p.Format = mformat
 			p.MessageText = strings.Trim(text, " ")

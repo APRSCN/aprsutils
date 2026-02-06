@@ -40,8 +40,7 @@ func (p *Parsed) parseHeader(head string, conf *config) error {
 
 	// Validate callsign
 	if !conf.disableToCallsignValidate {
-		ok = aprsutils.ValidateCallsign(toCall)
-		if !ok {
+		if ok = aprsutils.ValidateCallsign(toCall); !ok {
 			return errors.New("invalid toCallsign in header")
 		}
 	}
@@ -92,8 +91,7 @@ func (p *Parsed) parseBody(body string) error {
 	switch packetType {
 	// 3rd party traffic
 	case "}":
-		err := p.parseThirdParty(body)
-		if err != nil {
+		if err := p.parseThirdParty(body); err != nil {
 			return err
 		}
 	// Invalid
@@ -111,8 +109,7 @@ func (p *Parsed) parseBody(body string) error {
 	case "‘":
 		fallthrough
 	case "'":
-		_, err := p.parseMicE(p.To, body)
-		if err != nil {
+		if _, err := p.parseMicE(p.To, body); err != nil {
 			return err
 		}
 	// Message packet
@@ -134,15 +131,13 @@ func (p *Parsed) parseBody(body string) error {
 	case "@":
 		fallthrough
 	case ";":
-		err := p.parsePosition(packetType, body)
-		if err != nil {
+		if err := p.parsePosition(packetType, body); err != nil {
 			return err
 		}
 	default:
 		// Position report (regular or compressed)
 		if pos := strings.Index(body, "!"); pos >= 0 && pos < 40 {
-			err := p.parsePosition(packetType, body)
-			if err != nil {
+			if err := p.parsePosition(packetType, body); err != nil {
 				return err
 			}
 		} else {
