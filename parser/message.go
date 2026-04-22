@@ -3,8 +3,8 @@ package parser
 import (
 	"strings"
 
-	"github.com/ghinknet/regexp"
-	"github.com/ghinknet/toolbox/expr"
+	"go.gh.ink/regexp"
+	"go.gh.ink/toolbox/expr"
 
 	"github.com/APRSCN/aprsutils/utils"
 )

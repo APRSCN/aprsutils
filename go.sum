@@ -1,4 +1,4 @@
-github.com/ghinknet/regexp v1.0.0 h1:d0Du+oCgONLUWZv0kJcg0V9ahViMFEQSh5z5p7Eo5Yw=
-github.com/ghinknet/regexp v1.0.0/go.mod h1:LbgzZRLl1HPcomJdfidnHw65ZZIu0E1PZIrtMGi50mU=
-github.com/ghinknet/toolbox v1.4.0 h1:nvv9/30m3oFWZCnqEQe3ZE8Xog8u/BErYkWryU07tHI=
-github.com/ghinknet/toolbox v1.4.0/go.mod h1:8JkXyeRPGaCSf/7nIZEKr8tJjzhzu/f/WpN7euSWQLI=
+go.gh.ink/regexp v1.0.1 h1:ky3wxwskm49c4IlAeN64p4PeTXaO4o7Y8LpQRSeZLF8=
+go.gh.ink/regexp v1.0.1/go.mod h1:UKvDp3i0wU860Et6Ei+bVIfxrp9vJGGPswOlFhKvwaw=
+go.gh.ink/toolbox v1.11.2 h1:yZCgAOdYDRLMCkrIJkdxV72namA9W5CWVqI5jUzmo8s=
+go.gh.ink/toolbox v1.11.2/go.mod h1:srf5QuykFzizNoa0HqnKySvGaW/poG5UDn2q3GpYtvc=

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/ghinknet/regexp"
+	"go.gh.ink/regexp"
 
 	"github.com/APRSCN/aprsutils"
 	"github.com/APRSCN/aprsutils/utils"

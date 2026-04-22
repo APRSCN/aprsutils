@@ -2,7 +2,7 @@ package aprsutils
 
 import (
 	"github.com/APRSCN/aprsutils/utils"
-	"github.com/ghinknet/regexp"
+	"go.gh.ink/regexp"
 )
 
 // ValidateCallsign checks whether a callsign is valid

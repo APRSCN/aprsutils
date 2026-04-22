@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ghinknet/regexp"
+	"go.gh.ink/regexp"
 
 	"github.com/APRSCN/aprsutils/utils"
 )
