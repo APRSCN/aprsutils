@@ -12,9 +12,18 @@ func (p *Parsed) parseInvalid(body string) string {
 // parseUserDefined parses user defined APRS packet
 func (p *Parsed) parseUserDefined(body string) string {
 	p.Format = "user-defined"
-	p.ID = string([]rune(body)[0])
-	p.Type = string([]rune(body)[1])
-	p.Body = string([]rune(body)[2:])
+	runes := []rune(body)
+	// Body always has at least one rune here (guaranteed by parseBody), but the
+	// type byte may be missing on malformed packets — guard the slice accesses.
+	if len(runes) >= 1 {
+		p.ID = string(runes[0])
+	}
+	if len(runes) >= 2 {
+		p.Type = string(runes[1])
+		p.Body = string(runes[2:])
+	} else {
+		p.Body = ""
+	}
 	return body
 }
 

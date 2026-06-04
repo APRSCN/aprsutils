@@ -27,7 +27,9 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 			name := matches[1]
 			flag := matches[2]
 
-			p.ObjectName = name
+			// Object names are fixed-width (9 chars) space-padded; trim so
+			// filters (o/NAME) and consumers see the logical name.
+			p.ObjectName = strings.TrimRight(name, " ")
 			p.Alive = flag == "*"
 
 			body = string([]rune(body)[10:])
@@ -101,17 +103,17 @@ func (p *Parsed) parseCompressed(body string) (string, error) {
 	// Set format
 	p.Format = "compressed"
 
-	compressed := string([]rune(body)[:13])
+	compressed := []rune(body)[:13]
 	body = string([]rune(body)[13:])
 
-	symbolTable := string([]rune(compressed)[0])
-	symbol := string([]rune(compressed)[9])
+	symbolTable := string(compressed[0])
+	symbol := string(compressed[9])
 
-	base91Lat, err := aprsutils.ToDecimal(string([]rune(compressed)[1:5]))
+	base91Lat, err := aprsutils.ToDecimal(string(compressed[1:5]))
 	if err != nil {
 		return body, err
 	}
-	base91Lon, err := aprsutils.ToDecimal(string([]rune(compressed)[5:9]))
+	base91Lon, err := aprsutils.ToDecimal(string(compressed[5:9]))
 	if err != nil {
 		return body, err
 	}
@@ -119,12 +121,12 @@ func (p *Parsed) parseCompressed(body string) (string, error) {
 	latitude := 90 - (float64(base91Lat) / 380926)
 	longitude := -180 + (float64(base91Lon) / 190463)
 
-	c1Int, _ := strconv.Atoi(string([]rune(compressed)[10]))
-	c1 := c1Int - 33
-	s1Int, _ := strconv.Atoi(string([]rune(compressed)[11]))
-	s1 := s1Int - 33
-	ctypeInt, _ := strconv.Atoi(string([]rune(compressed)[12]))
-	ctype := ctypeInt - 33
+	// The course/speed/altitude bytes are raw printable ASCII offset by 33.
+	// (The previous implementation used strconv.Atoi on a single character,
+	// which silently yielded 0 for any non-digit byte and corrupted decoding.)
+	c1 := int(compressed[10]) - 33
+	s1 := int(compressed[11]) - 33
+	ctype := int(compressed[12]) - 33
 
 	if c1 == -1 {
 		if ctype&0x20 == 0x20 {

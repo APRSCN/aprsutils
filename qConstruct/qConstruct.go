@@ -88,8 +88,10 @@ func (r *QResult) applyInitialProcessing(p parser.Parsed, config *QConfig) {
 		}
 	}
 
-	// If no q construct and packet from logged-in station
-	if !r.hasQConstruct() && strings.EqualFold(p.From, config.ClientLogin) {
+	// If no q construct and packet from logged-in station, ensure a single
+	// TCPIP*/TCPXX* marker is present (never duplicate). The originated-by-client
+	// path replacement is handled later.
+	if !r.hasQConstruct() && strings.EqualFold(p.From, config.ClientLogin) && !r.hasTCPIPPath() {
 		if config.IsVerified {
 			r.Path = append(r.Path, "TCPIP*")
 		} else {
@@ -206,6 +208,18 @@ func (r *QResult) processVerifiedClientOnly(config *QConfig, fromCall string) {
 
 // processStandardConnection processed standard connection
 func (r *QResult) processStandardConnection(config *QConfig, fromCall string) {
+	originated := strings.EqualFold(fromCall, config.ClientLogin)
+
+	// A validated client on an inbound port sending its OWN packet has its
+	// digipeater path discarded and replaced with ",TCPIP*,qAC,SERVER" (unless
+	// the q construct is qAI, handled by the trace path).
+	if originated && config.IsVerified &&
+		config.ConnectionType == ConnectionVerified &&
+		!r.hasSpecificQConstruct("qAI") {
+		r.Path = []string{"TCPIP*", "qAC", config.ServerLogin}
+		return
+	}
+
 	if r.hasQConstruct() {
 		// Skip to "All packets with q constructs"
 		return
@@ -229,7 +243,7 @@ func (r *QResult) processStandardConnection(config *QConfig, fromCall string) {
 		}
 	}
 
-	if strings.EqualFold(fromCall, config.ClientLogin) {
+	if originated {
 		if config.ConnectionType == ConnectionSendOnly {
 			r.Path = append(r.Path, "qAO", config.ServerLogin)
 		} else {
@@ -360,17 +374,17 @@ func (r *QResult) containsServerLogin(serverLogin string) bool {
 	return false
 }
 
-// hasDuplicateCallsigns checks whether there's a duplicate callsign
+// hasDuplicateCallsigns reports a duplicate callsign in the path. The
+// comparison is CASE-SENSITIVE: "ASDF" and "asdf" are distinct.
 func (r *QResult) hasDuplicateCallsigns() bool {
 	seen := make(map[string]bool)
 	for _, element := range r.Path {
 		// Simple check for callsign pattern (can be enhanced)
 		if aprsutils.ValidateCallsign(element) {
-			normalized := strings.ToUpper(element)
-			if seen[normalized] {
+			if seen[element] {
 				return true
 			}
-			seen[normalized] = true
+			seen[element] = true
 		}
 	}
 	return false
@@ -400,11 +414,11 @@ func (r *QResult) ipToHex(ipStr string) string {
 	if ip.To4() != nil {
 		ip = ip.To4()
 		return fmt.Sprintf("%02X%02X%02X%02X", ip[0], ip[1], ip[2], ip[3])
-	} else {
-		// For IPv6, use first 8 bytes
-		return fmt.Sprintf("%02X%02X%02X%02X%02X%02X%02X%02X",
-			ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7])
 	}
+
+	// For IPv6, use first 8 bytes
+	return fmt.Sprintf("%02X%02X%02X%02X%02X%02X%02X%02X",
+		ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7])
 }
 
 // GetPathString returns string of path result

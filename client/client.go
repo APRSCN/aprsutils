@@ -55,12 +55,17 @@ type Client struct {
 	retryTimes int
 	logger     aprsutils.Logger
 	handler    func(packet string)
-	server     string
+	server     string // server software banner
+	serverID   string // server callsign from logresp
 	software   string
 	version    string
 
 	conn    net.Conn
 	bufSize int
+
+	// udpLogin is the precomputed "user ... \r\n" line prefixed to every UDP
+	// submit datagram (empty for TCP).
+	udpLogin string
 
 	mu     sync.Mutex
 	done   chan struct{}
@@ -111,6 +116,25 @@ func (c *Client) Up() bool {
 
 func (c *Client) Server() string {
 	return c.server
+}
+
+// ServerID returns the upstream server's callsign, parsed from its logresp
+// line (empty until login completes).
+func (c *Client) ServerID() string {
+	return c.serverID
+}
+
+// RemoteAddr returns the resolved remote address of the active connection
+// (e.g. "44.135.0.1:10152"), or "" if not connected. Unlike Host(), which is
+// the configured (possibly DNS) hostname, this reflects the actual IP a
+// rotating DNS name resolved to for the current session.
+func (c *Client) RemoteAddr() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.conn == nil {
+		return ""
+	}
+	return c.conn.RemoteAddr().String()
 }
 
 // GetStats returns the current statistics
@@ -238,7 +262,13 @@ func NewClient(
 	return c
 }
 
-// Connect to an APRS server
+// Connect to an APRS server.
+//
+// For TCP the client opens a persistent stream, performs the login handshake
+// and starts the receive/heartbeat goroutines. For UDP it opens a connected
+// datagram socket used in "UDP submit" mode: there is no login handshake or
+// receive loop; instead every SendPacket datagram is prefixed with the login
+// line (see SendPacket).
 func (c *Client) Connect() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -251,8 +281,12 @@ func (c *Client) Connect() error {
 	// Build address
 	address := net.JoinHostPort(c.host, strconv.Itoa(c.port))
 
-	// Try to create TCP connection
-	conn, err := net.Dial("tcp", address)
+	network := "tcp"
+	if c.protocol == UDP {
+		network = "udp"
+	}
+
+	conn, err := net.Dial(network, address)
 	if err != nil {
 		return err
 	}
@@ -261,13 +295,33 @@ func (c *Client) Connect() error {
 	c.lastActivity = time.Now()
 
 	c.conn = conn
-	c.logger.Info(nil, "Connected to ", address)
+	c.logger.Info(nil, "Connected to ", address, " (", string(c.protocol), ")")
 
 	// Start statistics updater
 	go c.updateStats()
 
-	// Return and login
+	if c.protocol == UDP {
+		// UDP submit is connectionless and one-way; no handshake/receive loop.
+		// The login line is sent with each datagram in SendPacket.
+		c.precomputeUDPLogin()
+		return nil
+	}
+
+	// Return and login (TCP)
 	return c.login()
+}
+
+// precomputeUDPLogin builds the login line prepended to each UDP datagram.
+func (c *Client) precomputeUDPLogin() {
+	passcodeString := ""
+	if c.passcode != "" {
+		passcodeString = fmt.Sprintf(" pass %s", c.passcode)
+	}
+	login := fmt.Sprintf("user %s%s vers %s %s", c.callsign, passcodeString, c.software, c.version)
+	if c.mode != Fullfeed && c.filter != "" {
+		login += fmt.Sprintf(" filter %s", c.filter)
+	}
+	c.udpLogin = login + "\r\n"
 }
 
 // Login to an APRS server
@@ -399,8 +453,7 @@ root:
 			// Read string from reader
 			line, err := reader.ReadString('\n')
 			if err != nil {
-				var netErr net.Error
-				if errors.As(err, &netErr) && netErr.Timeout() {
+				if netErr, ok := errors.AsType[net.Error](err); ok && netErr.Timeout() {
 					// Timeout, retry
 					continue
 				}
@@ -426,6 +479,13 @@ root:
 				c.logger.Debug(nil, "Server info: ", line)
 				if serverInfoCount == 0 {
 					c.server = strings.TrimPrefix(line, "# ")
+				}
+				// Parse the server callsign from "... server <ID>".
+				if i := strings.LastIndex(line, "server "); i >= 0 {
+					id := strings.TrimSpace(line[i+len("server "):])
+					if id != "" {
+						c.serverID = id
+					}
 				}
 				serverInfoCount++
 				continue
@@ -490,7 +550,12 @@ func (c *Client) handlePacket(packet string) {
 	c.logger.Info(nil, "APRS packet - Sender: ", sender, ", Path: ", path, ", Data: ", data)
 }
 
-// SendPacket sends an APRS packet
+// SendPacket sends an APRS packet.
+//
+// For TCP the packet is written to the stream terminated by CRLF. For UDP
+// (submit mode) the datagram is the login line followed by the packet, both
+// CRLF-terminated, so the server can authenticate and inject each datagram
+// independently (qAU).
 func (c *Client) SendPacket(packet string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -499,8 +564,14 @@ func (c *Client) SendPacket(packet string) error {
 		return errors.New("client is closed or not connected")
 	}
 
-	// Construct packet
-	fullPacket := packet + "\r\n"
+	// Construct datagram/stream payload.
+	var fullPacket string
+	if c.protocol == UDP {
+		fullPacket = c.udpLogin + packet + "\r\n"
+	} else {
+		fullPacket = packet + "\r\n"
+	}
+
 	sent, err := c.conn.Write([]byte(fullPacket))
 	if err != nil {
 		c.logger.Error(nil, "Error send packet: ", err)

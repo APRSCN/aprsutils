@@ -97,7 +97,7 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	}
 	tempDstCall = string(tempDstCallRunes)
 
-	// Adjust the coordinates be in center of ambiguity box
+	// Adjust the coordinates be in centre of ambiguity box
 	latMinutesStr := strings.ReplaceAll(string([]rune(tempDstCall)[2:4])+"."+string([]rune(tempDstCall)[4:6]), " ", "0")
 	latMinutes, err := strconv.ParseFloat(latMinutesStr, 64)
 	if err != nil {
@@ -130,8 +130,13 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	}
 
 	// Parse longitude
-	lonF64, _ := strconv.ParseFloat(string([]rune(body)[0]), 64)
-	longitude := lonF64 - 28
+	// Mic-E longitude/speed/course fields are encoded as raw printable ASCII
+	// bytes, NOT decimal digits. They must be decoded from the byte value
+	// (offset by 28), not parsed as numbers. (The previous implementation used
+	// strconv.ParseFloat on single characters, which returned 0 for any
+	// non-digit byte and corrupted decoding for most real packets.)
+	bodyRunes := []rune(body)
+	longitude := float64(int(bodyRunes[0]) - 28)
 	if []rune(dstCall)[4] >= 0x50 {
 		longitude += 100
 	}
@@ -142,18 +147,16 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	}
 
 	// Long minutes
-	lngF641, _ := strconv.ParseFloat(string([]rune(body)[1]), 64)
-	lngMinutes := lngF641 - 28.0
+	lngMinutes := float64(int(bodyRunes[1]) - 28)
 	if lngMinutes >= 60 {
 		lngMinutes -= 60
 	}
 
 	// + (long hundredths of minutes)
-	lngF642, _ := strconv.ParseFloat(string([]rune(body)[2]), 64)
-	lngMinutes += (lngF642 - 28.0) / 100.0
+	lngMinutes += float64(int(bodyRunes[2])-28) / 100.0
 
 	// Apply position ambiguity
-	// Routines adjust longitude to center of the ambiguity box
+	// Routines adjust longitude to centre of the ambiguity box
 	if posAmbiguity == 4 {
 		lngMinutes = 30
 	} else if posAmbiguity == 3 {
@@ -176,14 +179,11 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	p.Lon = longitude
 
 	// Parse speed and course
-	speedF64, _ := strconv.ParseFloat(string([]rune(body)[3]), 64)
-	speed := (speedF64 - 28) * 10
-	courseF644, _ := strconv.ParseFloat(string([]rune(body)[4]), 64)
-	course := courseF644 - 28
+	speed := float64(int(bodyRunes[3])-28) * 10
+	course := float64(int(bodyRunes[4]) - 28)
 	quotient := int(course / 10.0)
 	course -= float64(quotient * 10)
-	courseF645, _ := strconv.ParseFloat(string([]rune(body)[5]), 64)
-	course = course*100 + courseF645 - 28
+	course = course*100 + float64(int(bodyRunes[5])-28)
 	speed += float64(quotient)
 
 	if speed >= 800 {

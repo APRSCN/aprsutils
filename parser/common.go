@@ -72,19 +72,23 @@ func (p *Parsed) parseHeader(head string, conf *config) error {
 
 // parseBody parses body of APRS packet
 func (p *Parsed) parseBody(body string) error {
-	// Get type
-	packetType := string([]rune(body)[0:1])
-	body = string([]rune(body)[1:])
+	// Get type (first rune)
+	runes := []rune(body)
+	if len(runes) == 0 {
+		return errors.New("packet body is empty")
+	}
+	packetType := string(runes[0:1])
+	body = string(runes[1:])
 
+	// Only status reports may have an empty payload (e.g. ">").
 	if utils.StringLen(body) == 0 && packetType != ">" {
 		return errors.New("packet body is empty after packet type character")
 	}
 
-	// Check formats
-	for _, f := range unsupportedFormats {
-		if packetType == f {
-			return errors.New("packet type is unsupported")
-		}
+	// Reject formats we explicitly do not decode.
+	if _, ok := unsupportedFormats[packetType]; ok {
+		p.parseInvalid(body)
+		return errors.New("packet type is unsupported")
 	}
 
 	// Match type
@@ -94,57 +98,134 @@ func (p *Parsed) parseBody(body string) error {
 		if err := p.parseThirdParty(body); err != nil {
 			return err
 		}
+		p.PacketType |= TypeThirdParty
 	// Invalid
 	case ",":
 		p.parseInvalid(body)
 	// User defined
 	case "{":
 		p.parseUserDefined(body)
+		p.PacketType |= TypeUserDef
 	// Status report
 	case ">":
 		p.parseStatus(body)
+		p.PacketType |= TypeStatus
+	// Query
+	case "?":
+		p.parseQuery(body)
+		p.PacketType |= TypeQuery
+	// Telemetry report (Tnnn or T#nnn)
+	case "T":
+		p.parseTelemetryReport(body)
+		p.PacketType |= TypeTelemetry
+	// Raw NMEA / GPS sentence
+	case "$":
+		p.parseNMEA(body)
+		p.PacketType |= TypeNMEA
+	// Item report
+	case ")":
+		if err := p.parseItem(body); err != nil {
+			return err
+		}
+		p.PacketType |= TypeItem
 	// Mic-E packet
-	case "`":
-		fallthrough
-	case "‘":
-		fallthrough
-	case "'":
+	case "`", "‘", "'":
 		if _, err := p.parseMicE(p.To, body); err != nil {
 			return err
 		}
+		p.PacketType |= TypePosition
 	// Message packet
 	case ":":
 		p.parseMessage(body)
-	// Positionless weather report
-	case "_":
-		_, err := p.parseWeather(body)
-		if err != nil {
+		p.PacketType |= TypeMessage
+		if p.Format == "bulletin" || p.Format == "group-bulletin" || p.Format == "announcement" {
+			p.PacketType |= TypeBulletin
+		}
+	// Positionless weather report ("_" classic, "#"/"*" raw)
+	case "_", "#", "*":
+		if _, err := p.parseWeather(body); err != nil {
 			return err
 		}
-	// Position report (regular or compressed)
-	case "!":
-		fallthrough
-	case "=":
-		fallthrough
-	case "/":
-		fallthrough
-	case "@":
-		fallthrough
+		p.PacketType |= TypeWeather
+	// Object report
 	case ";":
 		if err := p.parsePosition(packetType, body); err != nil {
 			return err
 		}
+		p.PacketType |= TypeObject
+	// Position report (regular or compressed)
+	case "!", "=", "/", "@":
+		if err := p.parsePosition(packetType, body); err != nil {
+			return err
+		}
+		p.PacketType |= TypePosition
 	default:
-		// Position report (regular or compressed)
+		// Some clients omit the leading data-type char; if an embedded '!'
+		// appears early, treat the body as a position report.
 		if pos := strings.Index(body, "!"); pos >= 0 && pos < 40 {
 			if err := p.parsePosition(packetType, body); err != nil {
 				return err
 			}
+			p.PacketType |= TypePosition
 		} else {
-			// Invalid
 			p.parseInvalid(body)
 		}
 	}
 
+	// Mark presence of a usable position fix for position-aware filters.
+	if len(p.Symbol) == 2 {
+		p.HasPosition = true
+	}
+
+	// Weather data also implies a weather type even on positioned reports.
+	if len(p.Weather) > 0 {
+		p.PacketType |= TypeWeather
+	}
+
+	// CWOP weather (Citizen Weather Observer Program): CW####/DW####/...
+	// callsigns or APRSWXNET path. Tracked separately so t/w can exclude it
+	// and t/c can select it.
+	if p.PacketType.Has(TypeWeather) && isCWOP(p) {
+		p.PacketType |= TypeCWOP
+	}
+
+	// NWS detection: messages/objects whose addressee/identifier/source look
+	// like National Weather Service broadcasts.
+	if p.PacketType.Has(TypeMessage|TypeObject) && isNWS(p) {
+		p.PacketType |= TypeNWS
+	}
+
 	return nil
+}
+
+// cwopCallRe matches CWOP station callsigns: two letters from C..F (the
+// CWOP-assigned ranges) followed by 4+ digits, e.g. CW1234, DW5678, EW0001.
+var cwopCallRe = regexp.MustCompile(`(?i)^[CDEFGH]W\d{3,}$`)
+
+// isCWOP reports whether a (weather) packet originates from a CWOP station.
+func isCWOP(p *Parsed) bool {
+	if cwopCallRe.MatchString(p.From) {
+		return true
+	}
+	// CWOP traffic is frequently relayed via the APRSWXNET destination/path.
+	if p.To == "APRSWXNET" {
+		return true
+	}
+	for _, hop := range p.Path {
+		if hop == "APRSWXNET" {
+			return true
+		}
+	}
+	return false
+}
+
+// isNWS heuristically detects National Weather Service broadcasts.
+func isNWS(p *Parsed) bool {
+	if strings.HasPrefix(p.Addressee, "NWS") || strings.HasPrefix(p.Identifier, "NWS") {
+		return true
+	}
+	if strings.HasPrefix(p.From, "NWS") {
+		return true
+	}
+	return false
 }

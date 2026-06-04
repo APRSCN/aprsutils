@@ -20,7 +20,7 @@ func Passcode(callsign string) int {
 	}
 	rootCall = strings.ToUpper(rootCall)
 
-	hash := key // Initialize with the key value
+	hash := key // Initialise with the key value
 	data := []byte(rootCall)
 	length := len(data)
 

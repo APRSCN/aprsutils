@@ -89,6 +89,7 @@ func (p *Parsed) parseTimeStamp(packetType string, body string) (string, error) 
 
 	rawts, ts, form := matches[1], matches[2], matches[3]
 	utc := time.Now().UTC()
+	local := time.Now()
 	timestamp := 0
 
 	if !(packetType == ">" && form != "z") {
@@ -99,14 +100,18 @@ func (p *Parsed) parseTimeStamp(packetType string, body string) (string, error) 
 
 		switch form {
 		case "h":
-			// Zulu hhmmss format
+			// Zulu hhmmss format (UTC).
 			timeStr = fmt.Sprintf("%d%02d%02d%s", utc.Year(), utc.Month(), utc.Day(), ts)
-			timestamp, err = parseTimeString(timeStr, "20060102150405")
-		case "z", "/":
-			// Zulu ddhhmm format
-			// '/' local ddhhmm format
-			timeStr = fmt.Sprintf("%d%02d%s%02d", utc.Year(), utc.Month(), ts, 0)
-			timestamp, err = parseTimeString(timeStr, "20060102150405")
+			timestamp, err = parseTimeStringIn(timeStr, "20060102150405", time.UTC)
+		case "z":
+			// Zulu ddhhmm format (UTC): ts is DDHHMM, seconds = 00.
+			timeStr = fmt.Sprintf("%d%02d%s00", utc.Year(), utc.Month(), ts)
+			timestamp, err = parseTimeStringIn(timeStr, "20060102150405", time.UTC)
+		case "/":
+			// Local ddhhmm format: interpret in the host's local timezone
+			// (this is what the '/' form denotes per the APRS spec).
+			timeStr = fmt.Sprintf("%d%02d%s00", local.Year(), local.Month(), ts)
+			timestamp, err = parseTimeStringIn(timeStr, "20060102150405", time.Local)
 		default:
 			timestamp = 0
 		}
@@ -122,8 +127,10 @@ func (p *Parsed) parseTimeStamp(packetType string, body string) (string, error) 
 	return body, nil
 }
 
-func parseTimeString(timeStr, layout string) (int, error) {
-	t, err := time.Parse(layout, timeStr)
+// parseTimeStringIn parses timeStr in the given location and returns a Unix
+// timestamp.
+func parseTimeStringIn(timeStr, layout string, loc *time.Location) (int, error) {
+	t, err := time.ParseInLocation(layout, timeStr, loc)
 	if err != nil {
 		return 0, err
 	}

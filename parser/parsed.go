@@ -1,5 +1,29 @@
 package parser
 
+// PacketType is a bitmask of the high-level packet category, used by type
+// filters (t/...).
+type PacketType uint32
+
+const (
+	TypePosition   PacketType = 1 << iota // p - position (compressed/uncompressed/mic-e)
+	TypeObject                            // o - object
+	TypeItem                              // i - item
+	TypeMessage                           // m - message (incl. ack/rej)
+	TypeQuery                             // q - query
+	TypeStatus                            // s - status report
+	TypeTelemetry                         // t - telemetry
+	TypeUserDef                           // u - user-defined
+	TypeWeather                           // w - weather
+	TypeNWS                               // n - NWS broadcast (subset of message/object)
+	TypeBulletin                          // bulletin / announcement (subset of message)
+	TypeThirdParty                        // third-party traffic wrapper
+	TypeNMEA                              // raw NMEA / GPS sentence
+	TypeCWOP                              // c - CWOP weather (subset of weather)
+)
+
+// Has reports whether the given type bit is set.
+func (t PacketType) Has(b PacketType) bool { return t&b != 0 }
+
 // Parsed is a struct that storage parsed APRS packet
 type Parsed struct {
 	Raw            string
@@ -7,6 +31,8 @@ type Parsed struct {
 	To             string
 	Path           []string
 	Format         string
+	PacketType     PacketType
+	HasPosition    bool
 	Symbol         []string
 	Lat            float64
 	Lon            float64
