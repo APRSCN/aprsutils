@@ -31,14 +31,14 @@ const (
 
 // Stats contains statistics for the client
 type Stats struct {
-	TotalSentBytes  uint64        `json:"totalSentBytes"`
-	TotalRecvBytes  uint64        `json:"totalRecvBytes"`
-	CurrentSentRate uint64        `json:"currentSentRate"`
-	CurrentRecvRate uint64        `json:"currentRecvRate"`
-	PacketsSent     uint64        `json:"packetsSent"`
-	PacketsReceived uint64        `json:"packetsReceived"`
-	ConnectionTime  time.Duration `json:"connectionTime"`
-	LastActivity    time.Time     `json:"lastActivity"`
+	TotalSentBytes  uint64
+	TotalRecvBytes  uint64
+	CurrentSentRate uint64
+	CurrentRecvRate uint64
+	PacketsSent     uint64
+	PacketsReceived uint64
+	ConnectionTime  time.Duration
+	LastActivity    time.Time
 }
 
 // Client provides a basic struct of Client object
@@ -107,20 +107,28 @@ func (c *Client) Port() int {
 }
 
 func (c *Client) Uptime() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.uptime
 }
 
 func (c *Client) Up() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.up
 }
 
 func (c *Client) Server() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.server
 }
 
 // ServerID returns the upstream server's callsign, parsed from its logresp
 // line (empty until login completes).
 func (c *Client) ServerID() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.serverID
 }
 
@@ -477,6 +485,9 @@ root:
 			// Check prefix
 			if strings.HasPrefix(line, "#") {
 				c.logger.Debug(nil, "Server info: ", line)
+				// server/serverID are read by the accessors from other
+				// goroutines, so publish them under the lock.
+				c.mu.Lock()
 				if serverInfoCount == 0 {
 					c.server = strings.TrimPrefix(line, "# ")
 				}
@@ -487,6 +498,7 @@ root:
 						c.serverID = id
 					}
 				}
+				c.mu.Unlock()
 				serverInfoCount++
 				continue
 			}
@@ -497,7 +509,9 @@ root:
 	}
 
 	// Update status
+	c.mu.Lock()
 	c.up = false
+	c.mu.Unlock()
 
 	// Check closed
 	select {
