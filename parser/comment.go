@@ -38,7 +38,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 	re1 := regexp.MustCompile(pattern1)
 	matches := re1.FindStringSubmatch(body)
 
-	if matches != nil && len(matches) >= 3 {
+	if len(matches) >= 3 {
 		cse, spd := matches[1], matches[2]
 		body = string([]rune(body)[7:])
 
@@ -62,7 +62,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 		re2 := regexp.MustCompile(pattern2)
 		matches2 := re2.FindStringSubmatch(body)
 
-		if matches2 != nil && len(matches2) >= 3 {
+		if len(matches2) >= 3 {
 			// cse=000 means stations is fixed, Page 29 of the spec
 			if cse == "000" {
 				p.Course = 0
@@ -88,7 +88,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 		re3 := regexp.MustCompile(pattern3)
 		matches3 := re3.FindStringSubmatch(body)
 
-		if matches3 != nil && len(matches3) >= 4 {
+		if len(matches3) >= 4 {
 			ext, phg, phgr := matches3[1], matches3[2], matches3[3]
 			body = string([]rune(body)[utils.StringLen(ext):])
 
@@ -132,7 +132,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 			re4 := regexp.MustCompile(pattern4)
 			matches4 := re4.FindStringSubmatch(body)
 
-			if matches4 != nil && len(matches4) >= 2 {
+			if len(matches4) >= 2 {
 				rng := matches4[1]
 				body = string([]rune(body)[7:])
 				rngInt, _ := strconv.Atoi(rng)
@@ -150,7 +150,7 @@ func (p *Parsed) parseCommentAltitude(body string) string {
 	re := regexp.MustCompile(pattern)
 	matches := re.FindStringSubmatch(body)
 
-	if matches != nil && len(matches) >= 4 {
+	if len(matches) >= 4 {
 		body = matches[1] + matches[3]
 		altitude, _ := strconv.Atoi(matches[2])
 		p.Altitude = float64(altitude) * 0.3048
@@ -165,7 +165,7 @@ func (p *Parsed) parseDAO(body string) string {
 	re := regexp.MustCompile(pattern)
 	matches := re.FindStringSubmatch(body)
 
-	if matches != nil && len(matches) >= 5 {
+	if len(matches) >= 5 {
 		body, daobyte, dao, rest := matches[1], matches[2], matches[3], matches[4]
 		body += rest
 

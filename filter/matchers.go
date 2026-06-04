@@ -214,13 +214,19 @@ func precompileQ(sp *spec) bool {
 
 // --- matchers -------------------------------------------------------------
 
+// withinRange reports whether pkt lies within dist kilometres of the point
+// (lat, lon). It is the shared distance test used by the range (r/), my-range
+// (m/), friend-range (f/) and ranged-type (t/.../call/dist) filters.
+func withinRange(lat, lon float64, pkt *parser.Parsed, dist float64) bool {
+	return aprsutils.CalculateDistanceHaversine(lat, lon, pkt.Lat, pkt.Lon) <= dist
+}
+
 func matchRange(sp *spec, pkt *parser.Parsed, _ Context) bool {
 	if !pkt.HasPosition {
 		return false
 	}
 	rd := sp.compiled.(*rangeData)
-	d := aprsutils.CalculateDistanceHaversine(rd.lat, rd.lon, pkt.Lat, pkt.Lon)
-	return d <= rd.dist
+	return withinRange(rd.lat, rd.lon, pkt, rd.dist)
 }
 
 func matchArea(sp *spec, pkt *parser.Parsed, _ Context) bool {
@@ -241,8 +247,7 @@ func matchMyRange(sp *spec, pkt *parser.Parsed, ctx Context) bool {
 		return false
 	}
 	rd := sp.compiled.(*rangeData)
-	d := aprsutils.CalculateDistanceHaversine(pos.Lat, pos.Lon, pkt.Lat, pkt.Lon)
-	return d <= rd.dist
+	return withinRange(pos.Lat, pos.Lon, pkt, rd.dist)
 }
 
 func matchFriend(sp *spec, pkt *parser.Parsed, ctx Context) bool {
@@ -254,8 +259,7 @@ func matchFriend(sp *spec, pkt *parser.Parsed, ctx Context) bool {
 	if !ok {
 		return false
 	}
-	d := aprsutils.CalculateDistanceHaversine(pos.Lat, pos.Lon, pkt.Lat, pkt.Lon)
-	return d <= rd.dist
+	return withinRange(pos.Lat, pos.Lon, pkt, rd.dist)
 }
 
 func matchPrefix(sp *spec, pkt *parser.Parsed, _ Context) bool {
@@ -333,8 +337,7 @@ func matchType(sp *spec, pkt *parser.Parsed, ctx Context) bool {
 	if !ok {
 		return false
 	}
-	d := aprsutils.CalculateDistanceHaversine(pos.Lat, pos.Lon, pkt.Lat, pkt.Lon)
-	return d <= td.dist
+	return withinRange(pos.Lat, pos.Lon, pkt, td.dist)
 }
 
 func matchSymbol(sp *spec, pkt *parser.Parsed, _ Context) bool {

@@ -9,133 +9,125 @@ import (
 	"github.com/APRSCN/aprsutils/utils"
 )
 
-// parseMessage parses message from APRS packet
-func (p *Parsed) parseMessage(body string) string {
-	for {
-		re1 := regexp.MustCompile(`(?i)^BLN([0-9])([a-z0-9_ \-]{5}):(.{0,67})`)
-		matches1 := re1.FindStringSubmatch(body)
-		if matches1 != nil && len(matches1) >= 4 {
-			bid, identifier, text := matches1[1], matches1[2], matches1[3]
-			identifier = strings.TrimRight(identifier, " ")
+// Message sub-format regexps, compiled once at package load.
+var (
+	reBulletin     = regexp.MustCompile(`(?i)^BLN([0-9])([a-z0-9_ \-]{5}):(.{0,67})`)
+	reAnnouncement = regexp.MustCompile(`^BLN([A-Z])([a-zA-Z0-9_ \-]{5}):(.{0,67})`)
+	reAddressed    = regexp.MustCompile(`^([a-zA-Z0-9_ \-]{9}):(.*)$`)
+	// NEW reply-ack ack/rej: ackMM}AA
+	reAckRejReply = regexp.MustCompile(`^(ack|rej)([A-Za-z0-9]{2})}([A-Za-z0-9]{2})?$`)
+	// Standard ack/rej (aprs101.pdf ch.14): ack12345
+	reAckRej = regexp.MustCompile(`^(ack|rej)([A-Za-z0-9]{1,5})$`)
+	// NEW message format trailer: text...{MM}AA
+	reMsgNoReply = regexp.MustCompile(`{([A-Za-z0-9]{2})}([A-Za-z0-9]{2})?$`)
+	// Old message format trailer: text...{msgNo
+	reMsgNo = regexp.MustCompile(`{([A-Za-z0-9]{1,5})$`)
+)
 
-			mformat := expr.Ternary(identifier != "", "group-bulletin", "bulletin")
+// parseMessage parses a message (":") body, populating the relevant Parsed
+// fields and Format. APRS supports two message formats:
+//   - the standard format described in aprs101.pdf
+//   - the 1999 reply-ack addendum (http://www.aprs.org/aprs11/replyacks.txt)
+//
+// A message (ack/rej or a text body) may carry no message number, an
+// old-format number (1..5 chars), or a new-format number (2 chars) with an
+// optional trailing free ack number.
+func (p *Parsed) parseMessage(body string) {
+	switch {
+	// Bulletin: BLN<digit><id>:text
+	case matchN(reBulletin, body, 4):
+		m := reBulletin.FindStringSubmatch(body)
+		identifier := strings.TrimRight(m[2], " ")
+		p.Format = expr.Ternary(identifier != "", "group-bulletin", "bulletin")
+		p.MessageText = strings.Trim(m[3], " ")
+		p.BID = m[1]
+		p.Identifier = identifier
 
-			p.Format = mformat
-			p.MessageText = strings.Trim(text, " ")
-			p.BID = bid
-			p.Identifier = identifier
-			break
-		}
+	// Announcement: BLN<letter><id>:text
+	case matchN(reAnnouncement, body, 4):
+		m := reAnnouncement.FindStringSubmatch(body)
+		p.Format = "announcement"
+		p.MessageText = strings.Trim(m[3], " ")
+		p.AID = m[1]
+		p.Identifier = strings.TrimRight(m[2], " ")
 
-		re2 := regexp.MustCompile(`^BLN([A-Z])([a-zA-Z0-9_ \-]{5}):(.{0,67})`)
-		matches2 := re2.FindStringSubmatch(body)
-		if matches2 != nil && len(matches2) >= 4 {
-			aid, identifier, text := matches2[1], matches2[2], matches2[3]
-			identifier = strings.TrimRight(identifier, " ")
+	// Addressed message: <9-char addressee>:body
+	case matchN(reAddressed, body, 3):
+		m := reAddressed.FindStringSubmatch(body)
+		p.Addressee = strings.TrimRight(m[1], " ")
+		p.parseAddressedMessage(m[2])
+	}
+}
 
-			p.Format = "announcement"
-			p.MessageText = strings.Trim(text, " ")
-			p.AID = aid
-			p.Identifier = identifier
-			break
-		}
+// matchN reports whether re matches body with at least n submatch groups
+// (including the full match at index 0).
+func matchN(re *regexp.Regexp, body string, n int) bool {
+	m := re.FindStringSubmatch(body)
+	return m != nil && len(m) >= n
+}
 
-		re3 := regexp.MustCompile(`^([a-zA-Z0-9_ \-]{9}):(.*)$`)
-		matches3 := re3.FindStringSubmatch(body)
-		if matches3 == nil || len(matches3) < 3 {
-			break
-		}
-
-		addressee, remainingBody := matches3[1], matches3[2]
-		p.Addressee = strings.TrimRight(addressee, " ")
-		body = remainingBody
-
-		remainingBody, _ = p.parseTelemetryConfig(body)
-
-		p.Format = "message"
-
-		/*
-		 APRS supports two different message formats:
-		 - the standard format which is described in 'aprs101.pdf':
-		   http://www.aprs.org/doc/APRS101.PDF
-		 - an addendum from 1999 which introduces a new format:
-		   http://www.aprs.org/aprs11/replyacks.txt
-
-		 A message (ack/rej as well as a standard msg text body) can either have:
-		 - no message number at all
-		 - a message number in the old format (1..5 characters / digits)
-		 - a message number in the new format (2 characters / digits) without trailing 'ack msg no'
-		 - a message number in the new format with trailing 'free ack msg no' (2 characters / digits)
-		*/
-
-		// ack / rej
-		// ---------------------------
-		// NEW REPLAY-ACK
-		// Format: :AAAABBBBC:ackMM}AA
-		re4 := regexp.MustCompile(`^(ack|rej)([A-Za-z0-9]{2})}([A-Za-z0-9]{2})?$`)
-		matches4 := re4.FindStringSubmatch(body)
-		if matches4 != nil && len(matches4) >= 3 {
-			p.Response = matches4[1]
-			p.MsgNo = matches4[2]
-			if len(matches4) >= 4 && matches4[3] != "" {
-				p.AckMsgNo = matches4[3]
-			}
-			break
-		}
-
-		// ack/rej standard format as per aprs101.pdf chapter 14
-		// Format: :AAAABBBBC:ack12345
-		re5 := regexp.MustCompile(`^(ack|rej)([A-Za-z0-9]{1,5})$`)
-		matches5 := re5.FindStringSubmatch(body)
-		if matches5 != nil && len(matches5) >= 3 {
-			p.Response = matches5[1]
-			p.MsgNo = matches5[2]
-			break
-		}
-
-		// Regular message body parser
-		// ---------------------------
-		p.MessageText = strings.Trim(body, " ")
-
-		// Check for ACKs
-		// New message format: http://www.aprs.org/aprs11/replyacks.txt
-		// Format: :AAAABBBBC:text.....{MM}AA
-		re6 := regexp.MustCompile(`{([A-Za-z0-9]{2})}([A-Za-z0-9]{2})?$`)
-		matches6 := re6.FindStringSubmatch(body)
-		if matches6 != nil && len(matches6) >= 2 {
-			msgNo := matches6[1]
-			ackMsgNo := ""
-			if len(matches6) >= 3 {
-				ackMsgNo = matches6[2]
-			}
-
-			removeLen := 4 + utils.StringLen(ackMsgNo) // {MM} + AA
-			if utils.StringLen(body) >= removeLen {
-				p.MessageText = strings.Trim(string([]rune(body)[:utils.StringLen(body)-removeLen]), " ")
-			}
-			p.MsgNo = msgNo
-			if ackMsgNo != "" {
-				p.AckMsgNo = ackMsgNo
-			}
-			break
-		}
-
-		// Old message format - see aprs101.pdf.
-		// Search for: msgNo present
-		re7 := regexp.MustCompile(`{([A-Za-z0-9]{1,5})$`)
-		matches7 := re7.FindStringSubmatch(body)
-		if matches7 != nil && len(matches7) >= 2 {
-			msgNo := matches7[1]
-			removeLen := 1 + utils.StringLen(msgNo) // { + msgNo
-			if utils.StringLen(body) >= removeLen {
-				p.MessageText = strings.Trim(string([]rune(body)[:utils.StringLen(body)-removeLen]), " ")
-			}
-			p.MsgNo = msgNo
-			break
-		}
-
-		break
+// parseAddressedMessage parses the part following the leading
+// "<addressee>:" of a message packet, setting Format and the message/ack
+// fields.
+func (p *Parsed) parseAddressedMessage(body string) {
+	// Telemetry configuration (PARM/UNIT/EQNS/BITS) is itself an addressed
+	// message; parseTelemetryConfig sets Format="telemetry-message" when it
+	// matches. Only fall back to a plain "message" when it did not.
+	if _, err := p.parseTelemetryConfig(body); err == nil && p.Format == "telemetry-message" {
+		return
 	}
 
-	return ""
+	p.Format = "message"
+
+	switch {
+	// NEW reply-ack ack/rej: ackMM}AA
+	case matchN(reAckRejReply, body, 3):
+		m := reAckRejReply.FindStringSubmatch(body)
+		p.Response = m[1]
+		p.MsgNo = m[2]
+		if len(m) >= 4 && m[3] != "" {
+			p.AckMsgNo = m[3]
+		}
+
+	// Standard ack/rej: ack12345
+	case matchN(reAckRej, body, 3):
+		m := reAckRej.FindStringSubmatch(body)
+		p.Response = m[1]
+		p.MsgNo = m[2]
+
+	// NEW message format with trailing {MM}AA
+	case matchN(reMsgNoReply, body, 2):
+		m := reMsgNoReply.FindStringSubmatch(body)
+		ackMsgNo := ""
+		if len(m) >= 3 {
+			ackMsgNo = m[2]
+		}
+		removeLen := 4 + utils.StringLen(ackMsgNo) // {MM} + AA
+		p.MessageText = trimTrailer(body, removeLen)
+		p.MsgNo = m[1]
+		if ackMsgNo != "" {
+			p.AckMsgNo = ackMsgNo
+		}
+
+	// Old message format with trailing {msgNo
+	case matchN(reMsgNo, body, 2):
+		m := reMsgNo.FindStringSubmatch(body)
+		removeLen := 1 + utils.StringLen(m[1]) // { + msgNo
+		p.MessageText = trimTrailer(body, removeLen)
+		p.MsgNo = m[1]
+
+	// Plain message text (no message number).
+	default:
+		p.MessageText = strings.Trim(body, " ")
+	}
+}
+
+// trimTrailer removes the trailing removeLen runes (the message-number
+// trailer) from body and trims surrounding spaces. If body is shorter than
+// removeLen it is returned trimmed unchanged.
+func trimTrailer(body string, removeLen int) string {
+	if utils.StringLen(body) < removeLen {
+		return strings.Trim(body, " ")
+	}
+	return strings.Trim(string([]rune(body)[:utils.StringLen(body)-removeLen]), " ")
 }

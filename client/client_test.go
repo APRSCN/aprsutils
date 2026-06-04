@@ -76,3 +76,49 @@ func TestProtocolAccessor(t *testing.T) {
 		t.Errorf("Protocol() = %q, want udp", c.Protocol())
 	}
 }
+
+// TestWaitReturnsAfterDropNoRetry guards the uplink reconnection contract:
+// with WithRetryTimes(0) the client does no internal reconnection, so when the
+// server drops the link Wait() must return (releasing the external supervisor
+// to dial a fresh connection). A regression here would hang the uplink manager
+// forever after the first disconnect.
+func TestWaitReturnsAfterDropNoRetry(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		// Consume the login line, then drop the connection.
+		buf := make([]byte, 256)
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_, _ = conn.Read(buf)
+		_ = conn.Close()
+	}()
+
+	addr := ln.Addr().(*net.TCPAddr)
+	c := NewClient("N0CALL", "", Fullfeed, TCP, "127.0.0.1", addr.Port,
+		WithRetryTimes(0))
+	if err := c.Connect(); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer c.Close()
+
+	done := make(chan struct{})
+	go func() {
+		c.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Good: Wait returned after the drop.
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait() did not return after the link dropped with WithRetryTimes(0)")
+	}
+}

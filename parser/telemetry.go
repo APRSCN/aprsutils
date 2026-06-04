@@ -24,7 +24,7 @@ func (p *Parsed) parseCommentTelemetry(text string) string {
 	re := regexp.MustCompile(pattern)
 	matches := re.FindStringSubmatch(text)
 
-	if matches != nil && len(matches) >= 4 && len(matches[2])%2 == 0 {
+	if len(matches) >= 4 && len(matches[2])%2 == 0 {
 		text, telemetry, post := matches[1], matches[2], matches[3]
 		text += post
 
@@ -63,7 +63,7 @@ func (p *Parsed) parseTelemetryConfig(body string) (string, error) {
 	re := regexp.MustCompile(pattern)
 	matches := re.FindStringSubmatch(body)
 
-	if matches != nil && len(matches) >= 3 {
+	if len(matches) >= 3 {
 		form, body := matches[1], matches[2]
 
 		p.Format = "telemetry-message"
@@ -140,7 +140,7 @@ func (p *Parsed) parseTelemetryConfig(body string) (string, error) {
 			pattern := `^([01]{8}),(.{0,23})$`
 			re := regexp.MustCompile(pattern)
 			matches := re.FindStringSubmatch(strings.TrimRight(body, " "))
-			if matches == nil || len(matches) < 3 {
+			if len(matches) < 3 {
 				return body, errors.New("incorrect format of " + form + " (title too long?)")
 			}
 

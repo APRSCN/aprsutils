@@ -83,7 +83,7 @@ func (p *Parsed) parseTimeStamp(packetType string, body string) (string, error) 
 	}
 	// Match
 	matches := regexp.MustCompile(`^((\d{6})(.))$`).FindStringSubmatch(string([]rune(body)[0:7]))
-	if matches == nil || len(matches) < 4 {
+	if len(matches) < 4 {
 		return body, nil
 	}
 

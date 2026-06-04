@@ -1,4 +1,4 @@
 package aprsutils
 
 const Name = "aprsutils"
-const Version = "1.2.3"
+const Version = "1.4.0"

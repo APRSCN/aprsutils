@@ -23,7 +23,7 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 	// Attempt to parse object report format
 	if packetType == ";" {
 		matches := regexp.MustCompile(`^([ -~]{9})(\*|_)`).FindStringSubmatch(body)
-		if matches != nil && len(matches) >= 3 {
+		if len(matches) >= 3 {
 			name := matches[1]
 			flag := matches[2]
 
@@ -77,10 +77,9 @@ func (p *Parsed) parsePosition(packetType string, body string) error {
 		// Attempt to parse winddir/speed
 		// Page 92 of the spec
 		body = p.parseDataExtensions(body)
-
-		body = p.parseWeatherData(body)
+		p.parseWeatherData(body)
 	} else {
-		body = p.parseComment(body)
+		p.parseComment(body)
 	}
 
 	// Object
@@ -168,7 +167,7 @@ func (p *Parsed) parseNormal(body string) (string, error) {
 	re := regexp.MustCompile(pattern)
 	matches := re.FindStringSubmatch(body)
 
-	if matches == nil || len(matches) < 10 {
+	if len(matches) < 10 {
 		return body, nil
 	}
 

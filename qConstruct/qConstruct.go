@@ -32,6 +32,22 @@ type QConfig struct {
 	IsVerified     bool
 	IsClientOnly   bool
 	IsSendOnly     bool
+
+	// QProtocolID is the accepted q-construct protocol id letter (the second
+	// character of a "qXY" construct). Empty means "A".
+	QProtocolID string
+	// DisallowOtherProtocols, when true, drops packets whose q-construct uses a
+	// protocol id different from QProtocolID.
+	DisallowOtherProtocols bool
+}
+
+// acceptedProtocolID returns the configured protocol id letter, defaulting to
+// 'A'.
+func (config *QConfig) acceptedProtocolID() byte {
+	if config.QProtocolID == "" {
+		return 'A'
+	}
+	return config.QProtocolID[0]
 }
 
 // QResult is the struct of result of QConstruct
@@ -102,6 +118,18 @@ func (r *QResult) applyInitialProcessing(p parser.Parsed, config *QConfig) {
 
 // checkForLoopsBeforeProcessing checks loop before all qConstruct
 func (r *QResult) checkForLoopsBeforeProcessing(config *QConfig) bool {
+	// Drop packets using a different q-construct protocol id when configured to
+	// keep a single network identifier.
+	if config.DisallowOtherProtocols {
+		if q := r.existingQConstruct(); q != "" {
+			if q[1] != config.acceptedProtocolID() {
+				r.ShouldDrop = true
+				r.DropReason = "q construct uses a disallowed protocol id"
+				return true
+			}
+		}
+	}
+
 	// Check for qAZ construct
 	if r.hasSpecificQConstruct("qAZ") {
 		r.ShouldDrop = true
@@ -308,6 +336,17 @@ func (r *QResult) hasQConstruct() bool {
 		}
 	}
 	return false
+}
+
+// existingQConstruct returns the first q-construct token ("qXY") in the path,
+// or "" if none is present.
+func (r *QResult) existingQConstruct() string {
+	for _, element := range r.Path {
+		if strings.HasPrefix(element, "q") && len(element) == 3 {
+			return element
+		}
+	}
+	return ""
 }
 
 // hasSpecificQConstruct checks whether the path contained specific QConstruct

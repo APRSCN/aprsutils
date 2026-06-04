@@ -20,7 +20,7 @@ var itemNameRe = regexp.MustCompile(`^([\x20-\x7e]{3,9})(!|_)`)
 // parseItem parses an APRS item report ( ')' data type ).
 func (p *Parsed) parseItem(body string) error {
 	matches := itemNameRe.FindStringSubmatch(body)
-	if matches == nil || len(matches) < 3 {
+	if len(matches) < 3 {
 		p.parseInvalid(body)
 		return errors.New("invalid item format")
 	}

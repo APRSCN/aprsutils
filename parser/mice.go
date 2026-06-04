@@ -203,7 +203,7 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 		// Check for optional 2 or 5 channel telemetry
 		re4 := regexp.MustCompile(`^('[0-9a-f]{10}|` + "`" + `[0-9a-f]{4})(.*)$`)
 		matches := re4.FindStringSubmatch(body)
-		if matches != nil && len(matches) >= 3 {
+		if len(matches) >= 3 {
 			hexData, remainingBody := matches[1], matches[2]
 			hexData = string([]rune(hexData)[1:])
 
@@ -225,7 +225,7 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 
 		re5 := regexp.MustCompile(`^(.*)([!-{]{3})}(.*)$`)
 		matches = re5.FindStringSubmatch(body)
-		if matches != nil && len(matches) >= 4 {
+		if len(matches) >= 4 {
 			bodyPart, altitude, extra := matches[1], matches[2], matches[3]
 			altitudeBase91, err := aprsutils.ToDecimal(altitude)
 			if err != nil {

@@ -125,3 +125,39 @@ func TestQOriginatedByClient(t *testing.T) {
 		}
 	}
 }
+
+// TestDisallowOtherQProtocols verifies that, when enabled, a packet whose
+// q-construct uses a protocol id other than the configured one is dropped,
+// while the accepted id passes through.
+func TestDisallowOtherQProtocols(t *testing.T) {
+	cfg := func() *QConfig {
+		return &QConfig{
+			ServerLogin:            testServer,
+			ClientLogin:            testLogin,
+			ConnectionType:         ConnectionOutboundServer,
+			IsVerified:             true,
+			QProtocolID:            "A",
+			DisallowOtherProtocols: true,
+		}
+	}
+
+	// qZX uses a non-"A" protocol id -> dropped.
+	_, drop, _ := run(t, "N5CAL-1>DST,qZX,SRV:>status", cfg())
+	if !drop {
+		t.Error("packet with qZ construct should be dropped when other protocols are disallowed")
+	}
+
+	// qAR uses the accepted "A" protocol id -> not dropped on this basis.
+	_, drop, loop := run(t, "N5CAL-1>DST,qAR,SRV:>status", cfg())
+	if drop || loop {
+		t.Errorf("packet with qAR should not be dropped (drop=%v loop=%v)", drop, loop)
+	}
+
+	// With the policy off, the qZ packet is not dropped for protocol reasons.
+	offCfg := cfg()
+	offCfg.DisallowOtherProtocols = false
+	_, drop, _ = run(t, "N5CAL-1>DST,qZX,SRV:>status", offCfg)
+	if drop {
+		t.Error("packet with qZ should not be dropped when policy is off")
+	}
+}

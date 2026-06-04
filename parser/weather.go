@@ -105,6 +105,11 @@ func (p *Parsed) parseWeatherData(body string) string {
 		re3 := regexp.MustCompile(`([cSgtrpPlLs#]\d{3}|t-\d{2}|h\d{2}|b\d{5}|s\.\d{2}|s\d\.\d)`)
 		matches := re3.FindAllString(data, -1)
 
+		// Initialise the map once; each match contributes a distinct field, so
+		// it must not be reset inside the loop (which would discard all but the
+		// last field).
+		p.Weather = make(map[string]float64)
+
 		for _, match := range matches {
 			if utils.StringLen(match) < 2 {
 				continue
@@ -114,8 +119,6 @@ func (p *Parsed) parseWeatherData(body string) string {
 			valueStr := string([]rune(match)[1:])
 
 			valueStr = strings.ReplaceAll(valueStr, " ", "")
-
-			p.Weather = make(map[string]float64)
 
 			if keyFunc, ok := valMap[keyChar]; ok {
 				if keyName, ok := keyMap[keyChar]; ok {

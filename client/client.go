@@ -2,12 +2,14 @@ package client
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/APRSCN/aprsutils"
@@ -63,6 +65,23 @@ type Client struct {
 	conn    net.Conn
 	bufSize int
 
+	// readTimeout is the per-read deadline applied while receiving from the
+	// server (0 means the built-in default of 30s).
+	readTimeout time.Duration
+
+	// TCP keepalive parameters for the connection. When kaEnable is true they
+	// are applied to the connected TCP socket so a dead idle peer is detected.
+	kaEnable   bool
+	kaIdle     time.Duration
+	kaInterval time.Duration
+	kaCount    int
+
+	// localAddrV4 / localAddrV6 optionally bind the local source address used
+	// for outbound connections, selected by the remote address family. Empty
+	// means let the OS choose.
+	localAddrV4 string
+	localAddrV6 string
+
 	// udpLogin is the precomputed "user ... \r\n" line prefixed to every UDP
 	// submit datagram (empty for TCP).
 	udpLogin string
@@ -70,14 +89,33 @@ type Client struct {
 	mu     sync.Mutex
 	done   chan struct{}
 	closed bool
+	// doneOnce guards close(done) so it happens exactly once, whether it is
+	// triggered by Close() or by receivePackets giving up on reconnection.
+	doneOnce sync.Once
 
-	// Statistics fields
-	statsMu         sync.RWMutex
-	stats           Stats
-	currentSent     uint64
-	currentRecv     uint64
+	// bgStarted ensures the lifecycle-scoped background goroutines (stats
+	// updater and heartbeat) are launched exactly once, so reconnects do not
+	// leak a fresh copy of each on every attempt.
+	bgStarted sync.Once
+
+	// Statistics. Cumulative totals and the current-second accumulators are
+	// atomic so the receive/send paths update them directly, without locking
+	// or spawning a goroutine per packet. The derived per-second rates are
+	// computed once a second by updateStats and published atomically.
+	totalSentBytes  atomic.Uint64
+	totalRecvBytes  atomic.Uint64
+	packetsSent     atomic.Uint64
+	packetsReceived atomic.Uint64
+	currentSent     atomic.Uint64 // bytes sent in the current 1s window
+	currentRecv     atomic.Uint64 // bytes received in the current 1s window
+	currentSentRate atomic.Uint64 // last computed send rate (bytes/s)
+	currentRecvRate atomic.Uint64 // last computed recv rate (bytes/s)
+	lastActivity    atomic.Int64  // unix nanoseconds of last send/recv (0 = none)
+
+	// statsMu guards lastStatsUpdate, which is normally touched only by the
+	// single updateStats goroutine but may also be reset by ResetStats.
+	statsMu         sync.Mutex
 	lastStatsUpdate time.Time
-	lastActivity    time.Time
 }
 
 // Export data
@@ -151,31 +189,44 @@ func (c *Client) GetStats() Stats {
 		return Stats{}
 	}
 
-	c.statsMu.RLock()
-	defer c.statsMu.RUnlock()
-
-	// Update connection time
-	if c.up && !c.uptime.IsZero() {
-		c.stats.ConnectionTime = time.Since(c.uptime)
+	s := Stats{
+		TotalSentBytes:  c.totalSentBytes.Load(),
+		TotalRecvBytes:  c.totalRecvBytes.Load(),
+		CurrentSentRate: c.currentSentRate.Load(),
+		CurrentRecvRate: c.currentRecvRate.Load(),
+		PacketsSent:     c.packetsSent.Load(),
+		PacketsReceived: c.packetsReceived.Load(),
 	}
 
-	// Update last activity
-	if !c.lastActivity.IsZero() {
-		c.stats.LastActivity = c.lastActivity
+	// Connection time (only meaningful while up).
+	c.mu.Lock()
+	up, uptime := c.up, c.uptime
+	c.mu.Unlock()
+	if up && !uptime.IsZero() {
+		s.ConnectionTime = time.Since(uptime)
 	}
 
-	return c.stats
+	if na := c.lastActivity.Load(); na != 0 {
+		s.LastActivity = time.Unix(0, na)
+	}
+
+	return s
 }
 
 // ResetStats resets all statistics to zero
 func (c *Client) ResetStats() {
-	c.statsMu.Lock()
-	defer c.statsMu.Unlock()
+	c.totalSentBytes.Store(0)
+	c.totalRecvBytes.Store(0)
+	c.packetsSent.Store(0)
+	c.packetsReceived.Store(0)
+	c.currentSent.Store(0)
+	c.currentRecv.Store(0)
+	c.currentSentRate.Store(0)
+	c.currentRecvRate.Store(0)
 
-	c.stats = Stats{}
-	c.currentSent = 0
-	c.currentRecv = 0
+	c.statsMu.Lock()
 	c.lastStatsUpdate = time.Now()
+	c.statsMu.Unlock()
 }
 
 // Option provides a basic option type
@@ -210,7 +261,11 @@ func WithFilter(filter string) Option {
 	}
 }
 
-// WithRetryTimes sets a retry times to custom
+// WithRetryTimes sets how many times the client tries to reconnect itself
+// after the link drops. Set it to 0 to disable internal reconnection entirely:
+// in that mode the client does not reconnect on its own, and when the link
+// drops it releases Wait() so an external supervisor can dial a fresh
+// connection (see Wait for the full contract).
 func WithRetryTimes(retryTimes int) Option {
 	return func(c *Client) {
 		c.retryTimes = retryTimes
@@ -221,6 +276,38 @@ func WithRetryTimes(retryTimes int) Option {
 func WithBufSize(bufSize int) Option {
 	return func(c *Client) {
 		c.bufSize = bufSize
+	}
+}
+
+// WithReadTimeout sets the per-read deadline applied while receiving from the
+// server. A zero or negative value keeps the built-in default.
+func WithReadTimeout(d time.Duration) Option {
+	return func(c *Client) {
+		if d > 0 {
+			c.readTimeout = d
+		}
+	}
+}
+
+// WithKeepAlive enables TCP keepalive on the connection: probing starts after
+// the socket has been idle for idle, probes are sent every interval, and the
+// link is dropped after count failed probes. It has no effect on UDP.
+func WithKeepAlive(idle, interval time.Duration, count int) Option {
+	return func(c *Client) {
+		c.kaEnable = true
+		c.kaIdle = idle
+		c.kaInterval = interval
+		c.kaCount = count
+	}
+}
+
+// WithLocalAddr binds the local source address for outbound connections. v4 is
+// used when connecting to an IPv4 remote, v6 for IPv6; either may be empty to
+// let the OS choose for that family.
+func WithLocalAddr(v4, v6 string) Option {
+	return func(c *Client) {
+		c.localAddrV4 = v4
+		c.localAddrV6 = v6
 	}
 }
 
@@ -294,29 +381,100 @@ func (c *Client) Connect() error {
 		network = "udp"
 	}
 
-	conn, err := net.Dial(network, address)
+	conn, err := c.dial(network, address)
 	if err != nil {
 		return err
 	}
 	c.up = true
 	c.uptime = time.Now()
-	c.lastActivity = time.Now()
+	c.lastActivity.Store(time.Now().UnixNano())
 
 	c.conn = conn
-	c.logger.Info(nil, "Connected to ", address, " (", string(c.protocol), ")")
-
-	// Start statistics updater
-	go c.updateStats()
+	c.logger.Info(context.TODO(), "Connected to ", address, " (", string(c.protocol), ")")
 
 	if c.protocol == UDP {
+		// Start the lifecycle stats updater once (UDP has no heartbeat).
+		c.bgStarted.Do(func() { go c.updateStats() })
 		// UDP submit is connectionless and one-way; no handshake/receive loop.
 		// The login line is sent with each datagram in SendPacket.
 		c.precomputeUDPLogin()
 		return nil
 	}
 
-	// Return and login (TCP)
+	// Enable TCP keepalive if requested so an idle but dead upstream is
+	// detected by the OS rather than only via the read timeout.
+	if c.kaEnable {
+		if tc, ok := conn.(*net.TCPConn); ok {
+			_ = tc.SetKeepAliveConfig(net.KeepAliveConfig{
+				Enable:   true,
+				Idle:     c.kaIdle,
+				Interval: c.kaInterval,
+				Count:    c.kaCount,
+			})
+		}
+	}
+
+	// Start the lifecycle-scoped background goroutines exactly once. They live
+	// for the whole Client lifetime (until Close closes c.done) and survive
+	// reconnects, so starting them per-Connect would leak a goroutine on every
+	// reconnect attempt.
+	c.bgStarted.Do(func() {
+		go c.updateStats()
+		go c.heartBeat()
+	})
+
+	// Login and start the (connection-scoped) receive loop.
 	return c.login()
+}
+
+// dial opens a connection to address, optionally binding a configured local
+// source address chosen by the resolved remote address family.
+func (c *Client) dial(network, address string) (net.Conn, error) {
+	dialer := net.Dialer{}
+
+	if c.localAddrV4 != "" || c.localAddrV6 != "" {
+		if la := c.localAddrFor(network, address); la != nil {
+			dialer.LocalAddr = la
+		}
+	}
+
+	return dialer.Dial(network, address)
+}
+
+// localAddrFor resolves the remote address to determine its family and returns
+// the matching configured local address (or nil if none configured for that
+// family, or resolution fails — in which case the OS picks the source).
+func (c *Client) localAddrFor(network, address string) net.Addr {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil
+	}
+
+	ips, err := net.LookupIP(host)
+	if err != nil || len(ips) == 0 {
+		return nil
+	}
+
+	// Pick the configured local address matching the first resolved family.
+	local := ""
+	if ips[0].To4() != nil {
+		local = c.localAddrV4
+	} else {
+		local = c.localAddrV6
+	}
+	if local == "" {
+		return nil
+	}
+
+	ip := net.ParseIP(local)
+	if ip == nil {
+		return nil
+	}
+
+	if strings.HasPrefix(network, "udp") {
+		return &net.UDPAddr{IP: ip}
+	}
+	return &net.TCPAddr{IP: ip}
 }
 
 // precomputeUDPLogin builds the login line prepended to each UDP datagram.
@@ -349,58 +507,43 @@ func (c *Client) login() error {
 	// Send login request
 	sent, err := c.conn.Write([]byte(loginStr))
 	if err != nil {
-		c.logger.Error(nil, "Error writing login command to ", c.conn.RemoteAddr().String(), err)
+		c.logger.Error(context.TODO(), "Error writing login command to ", c.conn.RemoteAddr().String(), err)
 		return err
 	}
 
 	// Update statistics
-	go c.updateSentBytesStats(sent)
+	c.addSentBytes(sent)
 
 	// Check passcode
 	if strconv.Itoa(aprsutils.Passcode(c.callsign)) == c.passcode {
-		c.logger.Info(nil, "Logged in as ", c.callsign)
+		c.logger.Info(context.TODO(), "Logged in as ", c.callsign)
 	}
 
-	// Start packet receiving
+	// Start packet receiving for this connection. The stats updater and
+	// heartbeat are lifecycle-scoped and started once by Connect.
 	go c.receivePackets()
-
-	// Start heartbeat
-	go c.heartBeat()
 
 	return nil
 }
 
-// updateSentBytesStats updates sent bytes statistics
-func (c *Client) updateSentBytesStats(bytes int) {
-	c.statsMu.Lock()
-	defer c.statsMu.Unlock()
-	c.stats.TotalSentBytes += uint64(bytes)
-	c.currentSent += uint64(bytes)
-	c.lastActivity = time.Now()
+// addSentBytes records bytes written to the server (direct atomic update).
+func (c *Client) addSentBytes(bytes int) {
+	if bytes <= 0 {
+		return
+	}
+	c.totalSentBytes.Add(uint64(bytes))
+	c.currentSent.Add(uint64(bytes))
+	c.lastActivity.Store(time.Now().UnixNano())
 }
 
-// updateSentPacketStats updates sent packets statistics
-func (c *Client) updateSentPacketStats(packet int) {
-	c.statsMu.Lock()
-	defer c.statsMu.Unlock()
-	c.stats.PacketsSent += uint64(packet)
-}
-
-// updateRecvBytesStats updates received bytes statistics
-func (c *Client) updateRecvBytesStats(bytes int) {
-	c.statsMu.Lock()
-	defer c.statsMu.Unlock()
-	c.stats.TotalRecvBytes += uint64(bytes)
-	c.currentRecv += uint64(bytes)
-	c.stats.PacketsReceived += 1
-	c.lastActivity = time.Now()
-}
-
-// updateRecvPacketStats updates received packets statistics
-func (c *Client) updateRecvPacketStats(packet int) {
-	c.statsMu.Lock()
-	defer c.statsMu.Unlock()
-	c.stats.PacketsReceived += uint64(packet)
+// addRecvBytes records bytes read from the server (direct atomic update).
+func (c *Client) addRecvBytes(bytes int) {
+	if bytes <= 0 {
+		return
+	}
+	c.totalRecvBytes.Add(uint64(bytes))
+	c.currentRecv.Add(uint64(bytes))
+	c.lastActivity.Store(time.Now().UnixNano())
 }
 
 // updateStats periodically updates the current rate statistics
@@ -413,37 +556,55 @@ func (c *Client) updateStats() {
 		case <-c.done:
 			return
 		case <-ticker.C:
-			c.statsMu.Lock()
 			now := time.Now()
+
+			c.statsMu.Lock()
 			elapsed := now.Sub(c.lastStatsUpdate).Seconds()
-
-			if elapsed > 0 {
-				// Calculate current rates
-				currentSent := c.currentSent
-				c.currentSent = 0
-				currentRecv := c.currentRecv
-				c.currentRecv = 0
-
-				c.stats.CurrentSentRate = uint64(float64(currentSent) / elapsed)
-				c.stats.CurrentRecvRate = uint64(float64(currentRecv) / elapsed)
-			}
-
 			c.lastStatsUpdate = now
 			c.statsMu.Unlock()
+
+			if elapsed > 0 {
+				// Swap out the current-window accumulators and convert to a
+				// per-second rate.
+				sent := c.currentSent.Swap(0)
+				recv := c.currentRecv.Swap(0)
+				c.currentSentRate.Store(uint64(float64(sent) / elapsed))
+				c.currentRecvRate.Store(uint64(float64(recv) / elapsed))
+			}
 		}
 	}
 }
 
 // internalHandler handles packet first to do statistic
 func (c *Client) internalHandler(packet string) {
-	go c.updateRecvPacketStats(1)
+	c.packetsReceived.Add(1)
 	c.handler(packet)
 }
 
-// receivePackets receives packet from the APRS server
+// receivePackets receives packet from the APRS server. When the link drops it
+// attempts up to retryTimes reconnections; if it cannot re-establish the link
+// (or retryTimes is 0, i.e. reconnection is owned by an external supervisor)
+// it signals the client done so a blocked Wait() returns. A successful
+// reconnect hands the lifecycle to the fresh receive loop, so this one returns
+// without signalling done.
 func (c *Client) receivePackets() {
+	// reconnected is set when a successful Connect() has handed the lifecycle
+	// to a new receive loop; in that case we must not signal done. On every
+	// other return path the link is permanently down, so we release Wait().
+	reconnected := false
+	defer func() {
+		if !reconnected {
+			c.signalDone()
+		}
+	}()
+
 	// Create a reader
 	reader := bufio.NewReaderSize(c.conn, c.bufSize)
+
+	readTimeout := c.readTimeout
+	if readTimeout <= 0 {
+		readTimeout = 30 * time.Second
+	}
 
 	serverInfoCount := 0
 root:
@@ -453,8 +614,8 @@ root:
 			return
 		default:
 			// Set timeout
-			if err := c.conn.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
-				c.logger.Error(nil, "Error setting read deadline (timeout) ", err)
+			if err := c.conn.SetReadDeadline(time.Now().Add(readTimeout)); err != nil {
+				c.logger.Error(context.TODO(), "Error setting read deadline (timeout) ", err)
 				break root
 			}
 
@@ -466,15 +627,15 @@ root:
 					continue
 				}
 				if err.Error() == "EOF" {
-					c.logger.Warn(nil, "Server closed the connection")
+					c.logger.Warn(context.TODO(), "Server closed the connection")
 					break root
 				}
-				c.logger.Error(nil, "Error reading from server ", err)
+				c.logger.Error(context.TODO(), "Error reading from server ", err)
 				break root
 			}
 
 			// Update received bytes statistics
-			go c.updateRecvBytesStats(len(line))
+			c.addRecvBytes(len(line))
 
 			// Trim space
 			line = strings.TrimSpace(line)
@@ -484,7 +645,7 @@ root:
 
 			// Check prefix
 			if strings.HasPrefix(line, "#") {
-				c.logger.Debug(nil, "Server info: ", line)
+				c.logger.Debug(context.TODO(), "Server info: ", line)
 				// server/serverID are read by the accessors from other
 				// goroutines, so publish them under the lock.
 				c.mu.Lock()
@@ -533,10 +694,13 @@ root:
 		}
 
 		if err := c.Connect(); err != nil {
-			c.logger.Error(nil, "Error connecting to server", err, " retry ", i)
+			c.logger.Error(context.TODO(), "Error connecting to server", err, " retry ", i)
 			time.Sleep(3 * time.Second)
 			continue
 		} else {
+			// A fresh receive loop now owns the client lifecycle; do not
+			// signal done here.
+			reconnected = true
 			return
 		}
 	}
@@ -560,8 +724,8 @@ func (c *Client) handlePacket(packet string) {
 	path := pathData[0]
 	data := pathData[1]
 
-	c.logger.Debug(nil, "Raw packet received: ", packet)
-	c.logger.Info(nil, "APRS packet - Sender: ", sender, ", Path: ", path, ", Data: ", data)
+	c.logger.Debug(context.TODO(), "Raw packet received: ", packet)
+	c.logger.Info(context.TODO(), "APRS packet - Sender: ", sender, ", Path: ", path, ", Data: ", data)
 }
 
 // SendPacket sends an APRS packet.
@@ -588,19 +752,22 @@ func (c *Client) SendPacket(packet string) error {
 
 	sent, err := c.conn.Write([]byte(fullPacket))
 	if err != nil {
-		c.logger.Error(nil, "Error send packet: ", err)
+		c.logger.Error(context.TODO(), "Error send packet: ", err)
 		return err
 	}
 
 	// Update statistics
-	go c.updateSentBytesStats(sent)
-	go c.updateSentPacketStats(1)
+	c.addSentBytes(sent)
+	c.packetsSent.Add(1)
 
-	c.logger.Debug(nil, "Sent packet: ", packet)
+	c.logger.Debug(context.TODO(), "Sent packet: ", packet)
 	return nil
 }
 
-// heartBeat sends heart beat to keep alive
+// heartBeat sends a keepalive periodically for the whole client lifetime. It
+// is started once (see Connect) and survives reconnects: while the link is
+// down (conn == nil) it simply skips a tick; it only exits when the client is
+// closed.
 func (c *Client) heartBeat() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
@@ -610,19 +777,24 @@ func (c *Client) heartBeat() {
 		case <-c.done:
 			return
 		case <-ticker.C:
-			// Check connection
+			// Skip while disconnected; exit only when the client is closed.
 			c.mu.Lock()
-			if c.conn == nil || c.closed {
+			if c.closed {
 				c.mu.Unlock()
 				return
+			}
+			if c.conn == nil {
+				c.mu.Unlock()
+				continue
 			}
 			c.mu.Unlock()
 
 			ping := fmt.Sprintf("# %s keepalive %d", c.software, time.Now().Unix())
 			if err := c.SendPacket(ping); err != nil {
-				c.logger.Error(nil, "Heartbeat failed, connection may be closed")
+				c.logger.Error(context.TODO(), "Heartbeat failed, connection may be closed")
 
-				// Close connection
+				// Drop the dead connection so the receive loop reconnects; do
+				// not exit — the heartbeat resumes once the link is back.
 				c.mu.Lock()
 				if c.conn != nil {
 					_ = c.conn.Close()
@@ -630,7 +802,6 @@ func (c *Client) heartBeat() {
 					c.up = false
 				}
 				c.mu.Unlock()
-				return
 			}
 		}
 	}
@@ -650,19 +821,37 @@ func (c *Client) Close() {
 	}
 
 	c.closed = true
-	close(c.done)
+	c.signalDone()
 
 	if c.conn != nil {
 		if err := c.conn.Close(); err != nil {
-			c.logger.Error(nil, "Error closing connection ", err)
+			c.logger.Error(context.TODO(), "Error closing connection ", err)
 		} else {
-			c.logger.Info(nil, "client closed")
+			c.logger.Info(context.TODO(), "client closed")
 		}
 		c.conn = nil
 	}
 }
 
-// Wait the client exit
+// Wait blocks until the client is permanently done, i.e. the link has dropped
+// and the client will not (re)connect on its own. It returns when either:
+//
+//   - Close() is called, or
+//   - the connection dropped and the client exhausted its reconnection
+//     attempts (including the WithRetryTimes(0) case, where the client does no
+//     internal reconnection at all — see signalDone in receivePackets).
+//
+// This is the contract relied on by an external supervisor (e.g. the aprsgo
+// uplink manager) that owns reconnection: it sets WithRetryTimes(0) and uses
+// Wait() to learn when the link is down so it can dial a fresh connection.
 func (c *Client) Wait() {
 	<-c.done
+}
+
+// signalDone closes c.done exactly once. It marks the client as permanently
+// finished so a blocked Wait() returns. Unlike Close it does not tear down the
+// (already dead) connection; it is the path taken when receivePackets stops
+// reconnecting.
+func (c *Client) signalDone() {
+	c.doneOnce.Do(func() { close(c.done) })
 }

@@ -243,3 +243,30 @@ func TestParseUnsupportedFormat(t *testing.T) {
 		t.Error("expected error for unsupported format '<'")
 	}
 }
+
+// TestPositionlessWeatherMultiField guards against the regression where the
+// weather map was re-created inside the field loop, discarding all but the
+// last field. A multi-field positionless report must yield every field.
+func TestPositionlessWeatherMultiField(t *testing.T) {
+	// _ = positionless weather; fields: wind dir 220, speed 004, gust 005,
+	// temp 077F, humidity 50%, pressure 1013.0 hPa.
+	p, err := Parse("SRC>APRS,qAR,N5CAL-1:_12345678c220s004g005t077h50b10130")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, key := range []string{
+		"windDirection", "windSpeed", "windGust", "temperature",
+		"humidity", "pressure",
+	} {
+		if _, ok := p.Weather[key]; !ok {
+			t.Errorf("weather field %q missing; got %#v", key, p.Weather)
+		}
+	}
+	// Spot-check a couple of converted values.
+	if got := p.Weather["windDirection"]; !approx(got, 220, 0.001) {
+		t.Errorf("windDirection = %v, want 220", got)
+	}
+	if got := p.Weather["temperature"]; !approx(got, (77-32)/1.8, 0.01) {
+		t.Errorf("temperature = %v, want %v", got, (77-32)/1.8)
+	}
+}
