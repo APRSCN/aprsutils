@@ -99,10 +99,30 @@ func (p *Parsed) parseCompressed(body string) (string, error) {
 		return body, errors.New("invalid compressed format")
 	}
 
+	compressed := []rune(body)[:13]
+
+	// The first byte is the symbol table id. A genuine compressed report begins
+	// with '/', '\\', a digit (0-9) or a letter (A-Z, a-j) overlay. Bailing out
+	// here keeps non-position payloads (status, messages, free text) from being
+	// force-decoded into bogus coordinates.
+	symTable := compressed[0]
+	if !(symTable == '/' || symTable == '\\' ||
+		(symTable >= '0' && symTable <= '9') ||
+		(symTable >= 'A' && symTable <= 'Z') ||
+		(symTable >= 'a' && symTable <= 'j')) {
+		return body, errors.New("invalid compressed symbol table")
+	}
+
+	// The 4-byte lat/lon groups must be printable base-91 digits in '!'..'{'.
+	for i := 1; i <= 8; i++ {
+		if compressed[i] < '!' || compressed[i] > '{' {
+			return body, errors.New("invalid compressed coordinates")
+		}
+	}
+
 	// Set format
 	p.Format = "compressed"
 
-	compressed := []rune(body)[:13]
 	body = string([]rune(body)[13:])
 
 	symbolTable := string(compressed[0])

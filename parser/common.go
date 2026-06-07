@@ -172,8 +172,11 @@ func (p *Parsed) parseBody(body string) error {
 		}
 	}
 
-	// Mark presence of a usable position fix for position-aware filters.
-	if len(p.Symbol) == 2 {
+	// Mark presence of a usable position fix for position-aware filters. A
+	// symbol pair is necessary but not sufficient: require the decoded
+	// coordinates to be within the physically valid range so that mis-decoded
+	// non-position payloads cannot leak in as bogus far-away fixes.
+	if len(p.Symbol) == 2 && p.Lat >= -90 && p.Lat <= 90 && p.Lon >= -180 && p.Lon <= 180 {
 		p.HasPosition = true
 	}
 
