@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/APRSCN/aprsutils"
+	"go.gh.ink/toolbox/xfmt"
 )
 
 // Mode is a ENUM type for client mode
@@ -481,13 +481,13 @@ func (c *Client) localAddrFor(network, address string) net.Addr {
 func (c *Client) precomputeUDPLogin() {
 	passcodeString := ""
 	if c.passcode != "" {
-		passcodeString = fmt.Sprintf(" pass %s", c.passcode)
+		passcodeString = xfmt.Sprintf(" pass %s", c.passcode)
 	}
-	login := fmt.Sprintf("user %s%s vers %s %s", c.callsign, passcodeString, c.software, c.version)
+	login := xfmt.Sprintf("user %s%s vers %s %s", c.callsign, passcodeString, c.software, c.version)
 	if c.mode != Fullfeed && c.filter != "" {
-		login += fmt.Sprintf(" filter %s", c.filter)
+		login += xfmt.Sprintf(" filter %s", c.filter)
 	}
-	c.udpLogin = login + "\r\n"
+	c.udpLogin = strings.Join([]string{login, "\r\n"}, "")
 }
 
 // Login to an APRS server
@@ -495,14 +495,14 @@ func (c *Client) login() error {
 	// Construct login string
 	passcodeString := ""
 	if c.passcode != "" {
-		passcodeString = fmt.Sprintf(" pass %s", c.passcode)
+		passcodeString = xfmt.Sprintf(" pass %s", c.passcode)
 	}
-	loginStr := fmt.Sprintf("user %s%s vers %s %s", c.callsign, passcodeString, c.software, c.version)
+	loginStr := xfmt.Sprintf("user %s%s vers %s %s", c.callsign, passcodeString, c.software, c.version)
 	// Maybe have a filter?
 	if c.mode != Fullfeed && c.filter != "" {
-		loginStr += fmt.Sprintf(" filter %s", c.filter)
+		loginStr += xfmt.Sprintf(" filter %s", c.filter)
 	}
-	loginStr += "\r\n"
+	loginStr = strings.Join([]string{loginStr, "\r\n"}, "")
 
 	// Send login request
 	sent, err := c.conn.Write([]byte(loginStr))
@@ -745,9 +745,9 @@ func (c *Client) SendPacket(packet string) error {
 	// Construct datagram/stream payload.
 	var fullPacket string
 	if c.protocol == UDP {
-		fullPacket = c.udpLogin + packet + "\r\n"
+		fullPacket = strings.Join([]string{c.udpLogin, packet, "\r\n"}, "")
 	} else {
-		fullPacket = packet + "\r\n"
+		fullPacket = strings.Join([]string{packet, "\r\n"}, "")
 	}
 
 	sent, err := c.conn.Write([]byte(fullPacket))
@@ -789,7 +789,7 @@ func (c *Client) heartBeat() {
 			}
 			c.mu.Unlock()
 
-			ping := fmt.Sprintf("# %s keepalive %d", c.software, time.Now().Unix())
+			ping := xfmt.Sprintf("# %s keepalive %d", c.software, time.Now().Unix())
 			if err := c.SendPacket(ping); err != nil {
 				c.logger.Error(context.TODO(), "Heartbeat failed, connection may be closed")
 

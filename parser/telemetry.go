@@ -43,9 +43,9 @@ func (p *Parsed) parseCommentTelemetry(text string) string {
 			binaryStr := ""
 			for i := 0; i < 8; i++ {
 				if bits&(1<<uint(i)) != 0 {
-					binaryStr += "1"
+					binaryStr = strings.Join([]string{binaryStr, "1"}, "")
 				} else {
-					binaryStr += "0"
+					binaryStr = strings.Join([]string{binaryStr, "0"}, "")
 				}
 			}
 			telemetryData.Bits = binaryStr
@@ -77,7 +77,11 @@ func (p *Parsed) parseTelemetryConfig(body string) (string, error) {
 
 			for _, val := range vals {
 				if utils.StringLen(val) > 20 {
-					return body, errors.New("incorrect format of " + form + " (name too long?)")
+					return body, errors.New(
+						strings.Join([]string{
+							"incorrect format of ", form, " (name too long?)",
+						}, ""),
+					)
 				}
 			}
 
@@ -114,7 +118,11 @@ func (p *Parsed) parseTelemetryConfig(body string) (string, error) {
 				}
 
 				if !regexp.MustCompile(`^[-]?\d*\.?\d+$`).MatchString(val) {
-					return body, errors.New("value at " + strconv.Itoa(idx+1) + " is not a number in " + form)
+					return body, errors.New(
+						strings.Join([]string{
+							"value at ", strconv.Itoa(idx + 1), " is not a number in ", form,
+						}, ""),
+					)
 				}
 
 				if intVal, err := strconv.Atoi(val); err == nil {
@@ -141,7 +149,11 @@ func (p *Parsed) parseTelemetryConfig(body string) (string, error) {
 			re := regexp.MustCompile(pattern)
 			matches := re.FindStringSubmatch(strings.TrimRight(body, " "))
 			if len(matches) < 3 {
-				return body, errors.New("incorrect format of " + form + " (title too long?)")
+				return body, errors.New(
+					strings.Join([]string{
+						"incorrect format of ", form, " (title too long?)",
+					}, ""),
+				)
 			}
 
 			bits, title := matches[1], matches[2]

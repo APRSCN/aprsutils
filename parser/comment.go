@@ -123,7 +123,7 @@ func (p *Parsed) parseDataExtensions(body string) string {
 			p.PHGRange = phgRange
 
 			if phgr != "" {
-				p.PHG = phg + string([]rune(phgr)[0])
+				p.PHG = strings.Join([]string{phg, string([]rune(phgr)[0])}, "")
 				rate, _ := strconv.ParseInt(string([]rune(phgr)[0]), 16, 64)
 				p.PHGRate = int(rate)
 			}

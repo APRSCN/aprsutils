@@ -66,7 +66,9 @@ func FromDecimal(number int, width ...int) (string, error) {
 	result = strings.TrimLeft(result, "!")
 
 	if utf8.RuneCountInString(result) < w {
-		result = strings.Repeat("!", w-utf8.RuneCountInString(result)) + result
+		result = strings.Join([]string{
+			strings.Repeat("!", w-utf8.RuneCountInString(result)), result,
+		}, "")
 	}
 
 	return result, nil

@@ -67,13 +67,13 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	for _, i := range dstCall {
 		c := byte(i)
 		if c == 'K' || c == 'L' || c == 'Z' { // 空格
-			tempDstCall += " "
+			tempDstCall = strings.Join([]string{tempDstCall, " "}, "")
 		} else if c > 76 { // P-Y
-			tempDstCall += string(c - 32)
+			tempDstCall = strings.Join([]string{tempDstCall, string(c - 32)}, "")
 		} else if c > 57 { // A-J
-			tempDstCall += string(c - 17)
+			tempDstCall = strings.Join([]string{tempDstCall, string(c - 17)}, "")
 		} else { // 0-9
-			tempDstCall += string(c)
+			tempDstCall = strings.Join([]string{tempDstCall, string(c)}, "")
 		}
 	}
 
@@ -166,7 +166,11 @@ func (p *Parsed) parseMicE(dstCall string, body string) (string, error) {
 	} else if posAmbiguity == 1 {
 		lngMinutes = (math.Floor(lngMinutes*10) + 0.5) / 10.0
 	} else if posAmbiguity != 0 {
-		return "", errors.New("Unsupported position ambiguity: " + strconv.Itoa(posAmbiguity))
+		return "", errors.New(
+			strings.Join(
+				[]string{"Unsupported position ambiguity: ", strconv.Itoa(posAmbiguity)}, "",
+			),
+		)
 	}
 
 	longitude += lngMinutes / 60.0
